@@ -225,6 +225,19 @@ Or a tiny Electron tray notifier (optional)
 
 - Live updates via WebSocket; fall back to polling
 
+
+# How data flows (quick story)
+
+**Ingest**: Your parser posts a batch (``rvol_batches``) with ~100 raw rows into ``rvol_candidates``.
+
+**Filter/Score**: Service reads those rows, applies rules (Price 5–20, RVOL ≥ 5, Volume ≤ 20M), computes a simple score (RVOL for MVP), writes Top-5 to ``candidates_filtered`` with ``reasons_json``.
+
+**Notify Top-N**: For each kept row, send Telegram → write a notifications row with a dedupe_key and set ``notified_topn=true``.
+
+**Track Price**: You maintain ``positions`` and ``price_alerts``. A background poller (Finnhub, 60/min) evaluates alerts; when a threshold is crossed, it writes ``notifications`` (deduped) and updates ``last_triggered_at``.
+
+(Optional) **News**: A news job fills ``news_cache``; future versions use it to filter/boost candidates.
+
 # Docker Compose (outline)
 ```yaml
 version: "3.9"

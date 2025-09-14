@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from ..db import SessionLocal
 from ..services.filter import filter_and_score
 from ..services.notify import notify_telegram
-from ..models import CandidateFiltered
 from ..config import settings
 
 sched = BackgroundScheduler()

@@ -2,7 +2,7 @@ import time
 from sqlalchemy.orm import Session
 from ..db import SessionLocal
 from ..models import PriceAlert, Position
-from ..services.finnhub import get_quote
+from app.services.finhub import get_quote
 from ..services.rates import TokenBucket
 from ..services.notify import notify_telegram
 from ..config import settings

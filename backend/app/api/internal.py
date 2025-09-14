@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from uuid import UUID
 from ..db import get_db
 from ..models import RvolBatch, RvolCandidate
 from ..schemas import IngestBatch

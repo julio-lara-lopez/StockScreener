@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
-from ..models import RvolCandidate, CandidateFiltered
+from ..models import AppSetting, RvolCandidate, CandidateFiltered
 from ..config import settings
-from datetime import datetime,timedelta
-from typing import List, Dict
+from datetime import datetime, timedelta
+from typing import Dict
 from zoneinfo import ZoneInfo
 
 
@@ -26,8 +26,30 @@ def day_bounds_utc(day: datetime | None, tz_str="America/Santiago"):
     return start_local.astimezone(ZoneInfo("UTC")), end_local.astimezone(ZoneInfo("UTC"))
 
 def filter_and_score(db: Session, batch_id) -> list[CandidateFiltered]:
-    # ... your passes_filters + score_row as before ...
-    cfg = {...}
+    """Filter candidates for a batch and return the top scored ones.
+
+    Configuration comes from environment defaults (``settings``) with optional
+    overrides stored in the ``app_settings`` table.  Any keys found in the DB
+    that match our expected configuration fields will override the defaults.
+    """
+
+    # Default configuration from environment variables
+    cfg: Dict[str, float | int] = {
+        "price_min": settings.PRICE_MIN,
+        "price_max": settings.PRICE_MAX,
+        "min_rvol": settings.MIN_RVOL,
+        "volume_cap": settings.VOLUME_CAP,
+        "topN": settings.TOPN_PER_BATCH,
+    }
+
+    # Apply overrides from app_settings if present
+    for s in db.query(AppSetting).all():
+        if isinstance(s.value_json, dict):
+            for k, v in s.value_json.items():
+                if k in cfg:
+                    cfg[k] = v
+        elif s.key in cfg:
+            cfg[s.key] = s.value_json
     q = db.query(RvolCandidate).filter(RvolCandidate.batch_id == batch_id)
     kept = [(row, score_row(row)) for row in q if passes_filters(row, cfg)]
     kept.sort(key=lambda x: x[1], reverse=True)

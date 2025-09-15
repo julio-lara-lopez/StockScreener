@@ -1,5 +1,6 @@
 import time
 from sqlalchemy.orm import Session
+
 from ..db import SessionLocal
 from ..models import PriceAlert, Position
 from app.services.finhub import get_quote
@@ -32,7 +33,7 @@ def run_price_poller():
         db: Session = SessionLocal()
         try:
             # Build watchlist from active alerts + positions
-            alerts = db.query(PriceAlert).filter(PriceAlert.active == True).all()
+            alerts = db.query(PriceAlert).filter(PriceAlert.active.is_(True)).all()
             pos = db.query(Position).all()
             entries = {p.ticker: float(p.entry_price) for p in pos}
 

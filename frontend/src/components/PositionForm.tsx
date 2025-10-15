@@ -10,37 +10,39 @@ import Stack from '@mui/material/Stack';
 
 export type PositionFormValues = {
   ticker: string;
-  shares: number;
+  side: 'long' | 'short';
+  qty: number;
   entryPrice: number;
-  targetPrice?: number | null;
-  stopLoss?: number | null;
-  entryDate: string;
   notes?: string;
-  strategy: 'Long' | 'Short' | 'Options';
 };
 
 type FormState = {
-  [K in keyof PositionFormValues]: string;
+  ticker: string;
+  side: PositionFormValues['side'];
+  qty: string;
+  entryPrice: string;
+  notes: string;
 };
 
 const initialState: FormState = {
   ticker: '',
-  shares: '',
+  side: 'long',
+  qty: '',
   entryPrice: '',
-  targetPrice: '',
-  stopLoss: '',
-  entryDate: new Date().toISOString().substring(0, 10),
-  notes: '',
-  strategy: 'Long'
+  notes: ''
 };
 
 type PositionFormProps = {
-  onSubmit: (values: PositionFormValues) => void;
+  onSubmit: (values: PositionFormValues) => Promise<void>;
+  isSubmitting?: boolean;
 };
 
-const strategies: PositionFormValues['strategy'][] = ['Long', 'Short', 'Options'];
+const sides: { label: string; value: PositionFormValues['side'] }[] = [
+  { label: 'Long', value: 'long' },
+  { label: 'Short', value: 'short' }
+];
 
-const PositionForm = ({ onSubmit }: PositionFormProps): JSX.Element => {
+const PositionForm = ({ onSubmit, isSubmitting = false }: PositionFormProps): JSX.Element => {
   const [values, setValues] = useState<FormState>(initialState);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -59,29 +61,30 @@ const PositionForm = ({ onSubmit }: PositionFormProps): JSX.Element => {
     return Number.isNaN(parsed) ? null : parsed;
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const shares = parseNumber(values.shares);
+    const qty = parseNumber(values.qty);
     const entryPrice = parseNumber(values.entryPrice);
 
-    if (!values.ticker.trim() || shares === null || shares <= 0 || entryPrice === null || entryPrice <= 0) {
+    if (!values.ticker.trim() || qty === null || qty <= 0 || entryPrice === null || entryPrice <= 0) {
       return;
     }
 
     const payload: PositionFormValues = {
       ticker: values.ticker.trim().toUpperCase(),
-      shares,
+      side: values.side,
+      qty,
       entryPrice,
-      targetPrice: parseNumber(values.targetPrice),
-      stopLoss: parseNumber(values.stopLoss),
-      entryDate: values.entryDate,
-      notes: values.notes.trim(),
-      strategy: values.strategy as PositionFormValues['strategy']
+      notes: values.notes.trim() ? values.notes.trim() : undefined
     };
 
-    onSubmit(payload);
-    setValues(initialState);
+    try {
+      await onSubmit(payload);
+      setValues(initialState);
+    } catch {
+      // Keep the current form state so the user can adjust inputs after an error.
+    }
   };
 
   return (
@@ -103,11 +106,28 @@ const PositionForm = ({ onSubmit }: PositionFormProps): JSX.Element => {
             </Grid>
             <Grid xs={6} md={2}>
               <TextField
-                label="Shares"
-                name="shares"
+                label="Side"
+                name="side"
+                select
+                value={values.side}
+                onChange={handleChange}
+                required
+                fullWidth
+              >
+                {sides.map((side) => (
+                  <MenuItem key={side.value} value={side.value}>
+                    {side.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid xs={6} md={2}>
+              <TextField
+                label="Quantity"
+                name="qty"
                 type="number"
-                inputProps={{ min: 0, step: 1 }}
-                value={values.shares}
+                inputProps={{ min: 0, step: 0.01 }}
+                value={values.qty}
                 onChange={handleChange}
                 required
                 fullWidth
@@ -125,55 +145,6 @@ const PositionForm = ({ onSubmit }: PositionFormProps): JSX.Element => {
                 fullWidth
               />
             </Grid>
-            <Grid xs={6} md={2}>
-              <TextField
-                label="Target price"
-                name="targetPrice"
-                type="number"
-                inputProps={{ min: 0, step: 0.01 }}
-                value={values.targetPrice}
-                onChange={handleChange}
-                fullWidth
-              />
-            </Grid>
-            <Grid xs={6} md={2}>
-              <TextField
-                label="Stop loss"
-                name="stopLoss"
-                type="number"
-                inputProps={{ min: 0, step: 0.01 }}
-                value={values.stopLoss}
-                onChange={handleChange}
-                fullWidth
-              />
-            </Grid>
-            <Grid xs={12} md={3}>
-              <TextField
-                label="Entry date"
-                name="entryDate"
-                type="date"
-                value={values.entryDate}
-                onChange={handleChange}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid xs={12} md={3}>
-              <TextField
-                label="Strategy"
-                name="strategy"
-                select
-                value={values.strategy}
-                onChange={handleChange}
-                fullWidth
-              >
-                {strategies.map((strategy) => (
-                  <MenuItem key={strategy} value={strategy}>
-                    {strategy}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
             <Grid xs={12} md={6}>
               <TextField
                 label="Notes"
@@ -189,11 +160,11 @@ const PositionForm = ({ onSubmit }: PositionFormProps): JSX.Element => {
         </CardContent>
         <CardActions sx={{ justifyContent: 'flex-end', px: 3, pb: 3 }}>
           <Stack direction="row" spacing={2}>
-            <Button variant="outlined" color="inherit" onClick={() => setValues(initialState)} type="button">
+            <Button variant="outlined" color="inherit" onClick={() => setValues(initialState)} type="button" disabled={isSubmitting}>
               Reset
             </Button>
-            <Button variant="contained" color="primary" type="submit">
-              Add position
+            <Button variant="contained" color="primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving…' : 'Add position'}
             </Button>
           </Stack>
         </CardActions>

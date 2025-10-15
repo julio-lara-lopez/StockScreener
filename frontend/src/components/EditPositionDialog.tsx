@@ -18,6 +18,7 @@ type FormState = {
   side: PositionFormValues['side'];
   qty: string;
   entryPrice: string;
+  currentPrice: string;
   notes: string;
   exitPrice: string;
   closedAt: string;
@@ -42,6 +43,7 @@ const emptyState: FormState = {
   side: 'long',
   qty: '',
   entryPrice: '',
+  currentPrice: '',
   notes: '',
   exitPrice: '',
   closedAt: '',
@@ -89,6 +91,10 @@ const EditPositionDialog = ({
         side: position.side,
         qty: position.qty.toString(),
         entryPrice: position.entryPrice.toString(),
+        currentPrice:
+          position.currentPrice === null || position.currentPrice === undefined
+            ? position.entryPrice.toString()
+            : position.currentPrice.toString(),
         notes: position.notes ?? '',
         exitPrice:
           position.exitPrice === null || position.exitPrice === undefined
@@ -123,7 +129,8 @@ const EditPositionDialog = ({
       ...prev,
       isClosed: checked,
       closedAt: checked ? prev.closedAt || nowDateTimeLocal() : '',
-      exitPrice: checked ? prev.exitPrice : ''
+      exitPrice: checked ? prev.exitPrice : '',
+      currentPrice: checked ? prev.exitPrice || prev.currentPrice : prev.currentPrice
     }));
   };
 
@@ -144,6 +151,7 @@ const EditPositionDialog = ({
 
     const qty = parseNumber(values.qty);
     const entryPrice = parseNumber(values.entryPrice);
+    const currentPrice = parseNumber(values.currentPrice);
     const exitPrice = values.isClosed ? parseNumber(values.exitPrice) : null;
     const closedAtIso = values.isClosed
       ? values.closedAt
@@ -155,11 +163,15 @@ const EditPositionDialog = ({
       return;
     }
 
+    const effectiveCurrentPrice =
+      values.isClosed && exitPrice !== null ? exitPrice : currentPrice ?? entryPrice;
+
     const payload: PositionFormValues = {
       ticker: values.ticker.trim().toUpperCase(),
       side: values.side,
       qty,
       entryPrice,
+      currentPrice: effectiveCurrentPrice,
       notes: values.notes.trim() ? values.notes.trim() : undefined,
       exitPrice: values.isClosed ? exitPrice : null,
       closedAt: values.isClosed ? closedAtIso : null
@@ -232,6 +244,19 @@ const EditPositionDialog = ({
                 required
                 fullWidth
                 disabled={isSubmitting}
+              />
+            </Grid>
+            <Grid xs={6} md={2}>
+              <TextField
+                label="Current price"
+                name="currentPrice"
+                type="number"
+                inputProps={{ min: 0, step: 0.0001 }}
+                value={values.currentPrice}
+                onChange={handleChange}
+                fullWidth
+                disabled={isSubmitting}
+                helperText={values.isClosed ? 'Uses exit price when closing' : 'Mark-to-market price'}
               />
             </Grid>
             <Grid xs={12} md={6}>

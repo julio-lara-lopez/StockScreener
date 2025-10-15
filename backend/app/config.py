@@ -18,6 +18,7 @@ class Settings:
     PRICE_MAX = float(os.getenv("PRICE_MAX", "20"))
     MIN_RVOL = float(os.getenv("MIN_RVOL", "5"))
     VOLUME_CAP = int(os.getenv("VOLUME_CAP", "20000000"))  # using 'hot' cap by default
+    STARTING_CAPITAL = float(os.getenv("STARTING_CAPITAL", "0"))
 
 
 settings = Settings()

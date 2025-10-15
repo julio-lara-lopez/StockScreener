@@ -20,6 +20,10 @@ import theme, { createAppTheme } from './theme';
 import PositionForm, { PositionFormValues } from './components/PositionForm';
 import PositionTable, { Position } from './components/PositionTable';
 import EditPositionDialog from './components/EditPositionDialog';
+import PortfolioSummaryCard, {
+  PortfolioSummary,
+  PortfolioSummaryPoint
+} from './components/PortfolioSummaryCard';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -30,10 +34,27 @@ type ApiPosition = {
   side: 'long' | 'short';
   qty: number;
   entry_price: number;
+  current_price: number | null;
   notes?: string | null;
   exit_price?: number | null;
   closed_at?: string | null;
   status: 'open' | 'closed';
+};
+
+type ApiPortfolioPoint = {
+  timestamp: string;
+  label: string;
+  realized: number;
+  unrealized: number;
+  equity: number;
+};
+
+type ApiPortfolioSummary = {
+  starting_capital: number;
+  current_capital: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  equity_series: ApiPortfolioPoint[];
 };
 
 const mapPosition = (position: ApiPosition): Position => ({
@@ -42,6 +63,10 @@ const mapPosition = (position: ApiPosition): Position => ({
   side: position.side,
   qty: Number(position.qty),
   entryPrice: Number(position.entry_price),
+  currentPrice:
+    position.current_price === null || position.current_price === undefined
+      ? null
+      : Number(position.current_price),
   createdAt: position.created_at,
   notes: position.notes ?? '',
   exitPrice:
@@ -50,6 +75,20 @@ const mapPosition = (position: ApiPosition): Position => ({
       : Number(position.exit_price),
   closedAt: position.closed_at ?? null,
   status: position.status
+});
+
+const mapPortfolioSummary = (payload: ApiPortfolioSummary): PortfolioSummary => ({
+  startingCapital: payload.starting_capital,
+  currentCapital: payload.current_capital,
+  realizedPnl: payload.realized_pnl,
+  unrealizedPnl: payload.unrealized_pnl,
+  equitySeries: payload.equity_series.map<PortfolioSummaryPoint>((point) => ({
+    timestamp: point.timestamp,
+    label: point.label,
+    realized: point.realized,
+    unrealized: point.unrealized,
+    equity: point.equity
+  }))
 });
 
 function App(): JSX.Element {
@@ -61,6 +100,9 @@ function App(): JSX.Element {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [portfolioSummary, setPortfolioSummary] = useState<PortfolioSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
 
   const activeTheme = useMemo(() => (useDarkMode ? createAppTheme('dark') : theme), [useDarkMode]);
 
@@ -92,9 +134,28 @@ function App(): JSX.Element {
     }
   }, []);
 
+  const fetchPortfolioSummary = useCallback(async () => {
+    setIsSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/portfolio/summary`);
+      if (!response.ok) {
+        throw new Error('Failed to load portfolio summary.');
+      }
+      const data: ApiPortfolioSummary = await response.json();
+      setPortfolioSummary(mapPortfolioSummary(data));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unexpected error while loading the portfolio summary.';
+      setSummaryError(message);
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchPositions();
-  }, [fetchPositions]);
+    void fetchPortfolioSummary();
+  }, [fetchPositions, fetchPortfolioSummary]);
 
   const handleAddPosition = useCallback(
     async (values: PositionFormValues) => {
@@ -111,6 +172,7 @@ function App(): JSX.Element {
             side: values.side,
             qty: values.qty,
             entry_price: values.entryPrice,
+            current_price: values.currentPrice ?? values.entryPrice,
             notes: values.notes?.trim() ? values.notes.trim() : null
           })
         });
@@ -130,6 +192,7 @@ function App(): JSX.Element {
 
         const payload: ApiPosition = await response.json();
         setPositions((prev) => [mapPosition(payload), ...prev]);
+        await fetchPortfolioSummary();
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unexpected error while saving the position.';
         setError(message);
@@ -138,7 +201,7 @@ function App(): JSX.Element {
         setIsSubmitting(false);
       }
     },
-    []
+    [fetchPortfolioSummary]
   );
 
   const handleEditPosition = useCallback((position: Position) => {
@@ -161,6 +224,7 @@ function App(): JSX.Element {
             side: values.side,
             qty: values.qty,
             entry_price: values.entryPrice,
+            current_price: values.currentPrice ?? values.entryPrice,
             notes: values.notes?.trim() ? values.notes.trim() : null,
             exit_price: values.exitPrice ?? null,
             closed_at: values.closedAt ?? null
@@ -182,6 +246,7 @@ function App(): JSX.Element {
 
         await response.json();
         await fetchPositions();
+        await fetchPortfolioSummary();
         setEditingPosition(null);
       } catch (err) {
         const message =
@@ -192,7 +257,7 @@ function App(): JSX.Element {
         setIsUpdating(false);
       }
     },
-    [fetchPositions]
+    [fetchPositions, fetchPortfolioSummary]
   );
 
   return (
@@ -227,6 +292,12 @@ function App(): JSX.Element {
               )}
               <PositionForm onSubmit={handleAddPosition} isSubmitting={isSubmitting} />
             </Paper>
+            <PortfolioSummaryCard
+              summary={portfolioSummary}
+              loading={isSummaryLoading}
+              error={summaryError}
+              onRetry={fetchPortfolioSummary}
+            />
             <Paper elevation={0} sx={{ p: { xs: 2, md: 3 } }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: 2, px: { xs: 1, md: 0 } }}>
                 <Box>

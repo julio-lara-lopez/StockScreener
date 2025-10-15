@@ -34,6 +34,7 @@ class PositionBase(BaseModel):
     side: str
     qty: float
     entry_price: float
+    current_price: Optional[float] = None
     notes: Optional[str] = None
 
 
@@ -52,6 +53,22 @@ class PositionOut(PositionBase):
     exit_price: Optional[float] = None
     closed_at: Optional[datetime] = None
     status: Literal["open", "closed"]
+
+
+class PortfolioPoint(BaseModel):
+    timestamp: datetime
+    label: str
+    realized: float
+    unrealized: float
+    equity: float
+
+
+class PortfolioSummary(BaseModel):
+    starting_capital: float
+    current_capital: float
+    realized_pnl: float
+    unrealized_pnl: float
+    equity_series: List[PortfolioPoint]
 
 
 class AlertIn(BaseModel):

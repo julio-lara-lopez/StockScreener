@@ -74,6 +74,7 @@ CREATE TABLE "positions" (
   "side" text NOT NULL,
   "qty" numeric(18,4) NOT NULL,
   "entry_price" numeric(12,4) NOT NULL,
+  "current_price" numeric(12,4),
   "exit_price" numeric(12,4),
   "created_at" timestamptz NOT NULL DEFAULT (now()),
   "closed_at" timestamptz,

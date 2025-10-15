@@ -13,6 +13,7 @@ export type PositionFormValues = {
   side: 'long' | 'short';
   qty: number;
   entryPrice: number;
+  currentPrice?: number | null;
   notes?: string;
   exitPrice?: number | null;
   closedAt?: string | null;
@@ -23,6 +24,7 @@ type FormState = {
   side: PositionFormValues['side'];
   qty: string;
   entryPrice: string;
+  currentPrice: string;
   notes: string;
 };
 
@@ -31,6 +33,7 @@ const initialState: FormState = {
   side: 'long',
   qty: '',
   entryPrice: '',
+  currentPrice: '',
   notes: ''
 };
 
@@ -68,6 +71,7 @@ const PositionForm = ({ onSubmit, isSubmitting = false }: PositionFormProps): JS
 
     const qty = parseNumber(values.qty);
     const entryPrice = parseNumber(values.entryPrice);
+    const currentPrice = parseNumber(values.currentPrice);
 
     if (!values.ticker.trim() || qty === null || qty <= 0 || entryPrice === null || entryPrice <= 0) {
       return;
@@ -78,6 +82,7 @@ const PositionForm = ({ onSubmit, isSubmitting = false }: PositionFormProps): JS
       side: values.side,
       qty,
       entryPrice,
+      currentPrice: currentPrice ?? entryPrice,
       notes: values.notes.trim() ? values.notes.trim() : undefined
     };
 
@@ -145,6 +150,18 @@ const PositionForm = ({ onSubmit, isSubmitting = false }: PositionFormProps): JS
                 onChange={handleChange}
                 required
                 fullWidth
+              />
+            </Grid>
+            <Grid xs={6} md={2}>
+              <TextField
+                label="Current price"
+                name="currentPrice"
+                type="number"
+                inputProps={{ min: 0, step: 0.0001 }}
+                value={values.currentPrice}
+                onChange={handleChange}
+                fullWidth
+                helperText="Defaults to entry price"
               />
             </Grid>
             <Grid xs={12} md={6}>

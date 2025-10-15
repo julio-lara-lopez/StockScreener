@@ -111,6 +111,7 @@ class Position(Base):
     side = Column(String, nullable=False)  # "long"/"short"
     qty = Column(Numeric(18, 4), nullable=False)
     entry_price = Column(Numeric(12, 4), nullable=False)
+    current_price = Column(Numeric(12, 4))
     exit_price = Column(Numeric(12, 4))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True))

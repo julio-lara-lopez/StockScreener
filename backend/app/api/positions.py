@@ -12,6 +12,9 @@ def serialize_position(position: Position) -> PositionOut:
     exit_price = (
         float(position.exit_price) if position.exit_price is not None else None
     )
+    current_price = (
+        float(position.current_price) if position.current_price is not None else None
+    )
     return PositionOut(
         id=position.id,
         created_at=position.created_at,
@@ -19,6 +22,7 @@ def serialize_position(position: Position) -> PositionOut:
         side=position.side,
         qty=float(position.qty),
         entry_price=float(position.entry_price),
+        current_price=current_price,
         exit_price=exit_price,
         notes=position.notes,
         closed_at=position.closed_at,
@@ -28,7 +32,10 @@ def serialize_position(position: Position) -> PositionOut:
 
 @router.post("", response_model=PositionOut)
 def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
-    p = Position(**payload.dict())
+    data = payload.dict()
+    if data.get("current_price") is None:
+        data["current_price"] = data["entry_price"]
+    p = Position(**data)
     db.add(p)
     db.commit()
     db.refresh(p)
@@ -59,7 +66,13 @@ def update_position(
     if position is None:
         raise HTTPException(status_code=404, detail="Position not found")
 
-    for field, value in payload.dict().items():
+    data = payload.dict()
+    if data.get("current_price") is None and data.get("entry_price") is not None:
+        data["current_price"] = data["entry_price"]
+    if data.get("exit_price") is not None:
+        data["current_price"] = data["exit_price"]
+
+    for field, value in data.items():
         setattr(position, field, value)
 
     db.commit()

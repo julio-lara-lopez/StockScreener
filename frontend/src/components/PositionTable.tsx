@@ -21,6 +21,7 @@ export type Position = {
   side: 'long' | 'short';
   qty: number;
   entryPrice: number;
+  currentPrice: number | null;
   createdAt: string;
   notes?: string | null;
   exitPrice?: number | null;

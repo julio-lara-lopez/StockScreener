@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import internal, candidates, positions, alerts, settings as settings_api
+from .api import (
+    internal,
+    candidates,
+    positions,
+    alerts,
+    settings as settings_api,
+    portfolio,
+)
 from .workers.poller import run_price_poller
 import threading
 from .db import engine, Base
@@ -25,6 +32,7 @@ app.include_router(candidates.router)
 app.include_router(positions.router)
 app.include_router(alerts.router)
 app.include_router(settings_api.router)
+app.include_router(portfolio.router)
 # in app/main.py
 ENABLE_POLLER = False
 

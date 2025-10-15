@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from .api import internal, candidates, positions, alerts, settings as settings_api
 from .workers.poller import run_price_poller
 import threading
@@ -7,6 +8,17 @@ from .db import engine, Base
 Base.metadata.create_all(engine)  # DEV ONLY; use Alembic later
 
 app = FastAPI(title="RVOL Screener")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(internal.router)
 app.include_router(candidates.router)

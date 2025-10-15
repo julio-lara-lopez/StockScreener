@@ -23,10 +23,14 @@ export type Position = {
   entryPrice: number;
   createdAt: string;
   notes?: string | null;
+  exitPrice?: number | null;
+  closedAt?: string | null;
+  status: 'open' | 'closed';
 };
 
 type PositionTableProps = {
   positions: Position[];
+  variant: 'open' | 'closed';
   loading?: boolean;
   onEdit?: (position: Position) => void;
 };
@@ -37,6 +41,15 @@ const formatCurrency = (value: number | null | undefined) =>
     : new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD'
+      }).format(value);
+
+const formatSignedCurrency = (value: number | null | undefined) =>
+  value === null || value === undefined || Number.isNaN(value)
+    ? '—'
+    : new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        signDisplay: 'always'
       }).format(value);
 
 const formatDate = (value: string) => {
@@ -52,7 +65,7 @@ const formatDate = (value: string) => {
 
 const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
-const PositionTable = ({ positions, loading = false, onEdit }: PositionTableProps): JSX.Element => {
+const PositionTable = ({ positions, variant, loading = false, onEdit }: PositionTableProps): JSX.Element => {
   if (loading && positions.length === 0) {
     return (
       <Paper
@@ -74,6 +87,11 @@ const PositionTable = ({ positions, loading = false, onEdit }: PositionTableProp
   }
 
   if (positions.length === 0) {
+    const description =
+      variant === 'open'
+        ? 'Use the form above to add your first position. Your open positions will show up here with cost basis and performance summaries.'
+        : 'Once you close a position it will appear here with its exit price and realized performance.';
+
     return (
       <Paper
         variant="outlined"
@@ -86,11 +104,10 @@ const PositionTable = ({ positions, loading = false, onEdit }: PositionTableProp
       >
         <Stack spacing={1} alignItems="center">
           <Typography variant="h6" fontWeight={600}>
-            Start tracking your portfolio
+            {variant === 'open' ? 'Start tracking your portfolio' : 'No closed positions yet'}
           </Typography>
           <Typography variant="body2" color="text.secondary" maxWidth={420}>
-            Use the form above to add your first position. Your positions will show up here with cost
-            basis and performance summaries.
+            {description}
           </Typography>
         </Stack>
       </Paper>
@@ -100,29 +117,67 @@ const PositionTable = ({ positions, loading = false, onEdit }: PositionTableProp
   const totals = positions.reduce(
     (acc, position) => {
       const cost = position.qty * position.entryPrice;
+      const exitValue =
+        position.exitPrice === null || position.exitPrice === undefined
+          ? null
+          : position.exitPrice * position.qty;
+      let realized = null as number | null;
+      if (exitValue !== null) {
+        realized =
+          position.side === 'long'
+            ? exitValue - cost
+            : cost - exitValue;
+      }
+
       return {
         qty: acc.qty + position.qty,
-        costBasis: acc.costBasis + cost
+        costBasis: acc.costBasis + cost,
+        exitValue: exitValue !== null ? acc.exitValue + exitValue : acc.exitValue,
+        realized: realized !== null ? acc.realized + realized : acc.realized,
+        realizedCount: realized !== null ? acc.realizedCount + 1 : acc.realizedCount
       };
     },
-    { qty: 0, costBasis: 0 }
+    { qty: 0, costBasis: 0, exitValue: 0, realized: 0, realizedCount: 0 }
   );
 
   const averageEntryPrice = totals.qty > 0 ? totals.costBasis / totals.qty : 0;
+
+  const summaryTiles =
+    variant === 'open'
+      ? [
+          { title: 'Open positions', value: positions.length.toString() },
+          { title: 'Total quantity', value: totals.qty.toLocaleString() },
+          { title: 'Cost basis', value: formatCurrency(totals.costBasis) },
+          { title: 'Avg. entry price', value: formatCurrency(averageEntryPrice) }
+        ]
+      : [
+          { title: 'Closed positions', value: positions.length.toString() },
+          { title: 'Total quantity', value: totals.qty.toLocaleString() },
+          { title: 'Cost basis', value: formatCurrency(totals.costBasis) },
+          {
+            title: 'Realized P&L',
+            value:
+              totals.realizedCount > 0
+                ? formatSignedCurrency(totals.realized)
+                : '—'
+          }
+        ];
 
   return (
     <Stack spacing={3}>
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+          gridTemplateColumns: {
+            xs: 'repeat(auto-fill, minmax(140px, 1fr))',
+            md: 'repeat(auto-fill, minmax(180px, 1fr))'
+          },
           gap: 2
         }}
       >
-        <SummaryTile title="Positions" value={positions.length.toString()} />
-        <SummaryTile title="Total quantity" value={totals.qty.toLocaleString()} />
-        <SummaryTile title="Cost basis" value={formatCurrency(totals.costBasis)} />
-        <SummaryTile title="Avg. entry price" value={formatCurrency(averageEntryPrice)} />
+        {summaryTiles.map((tile) => (
+          <SummaryTile key={tile.title} title={tile.title} value={tile.value} />
+        ))}
       </Box>
       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
         <Table size="small">
@@ -132,15 +187,37 @@ const PositionTable = ({ positions, loading = false, onEdit }: PositionTableProp
               <TableCell>Side</TableCell>
               <TableCell align="right">Quantity</TableCell>
               <TableCell align="right">Entry price</TableCell>
+              {variant === 'closed' && <TableCell align="right">Exit price</TableCell>}
               <TableCell align="right">Cost basis</TableCell>
+              {variant === 'closed' && (
+                <>
+                  <TableCell align="right">Exit value</TableCell>
+                  <TableCell align="right">Realized P&L</TableCell>
+                </>
+              )}
               <TableCell>Notes</TableCell>
-              <TableCell>Created</TableCell>
+              {variant === 'closed' ? (
+                <>
+                  <TableCell>Closed</TableCell>
+                  <TableCell>Opened</TableCell>
+                </>
+              ) : (
+                <TableCell>Created</TableCell>
+              )}
               {onEdit && <TableCell align="right">Actions</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {positions.map((position) => {
               const cost = position.qty * position.entryPrice;
+              const exitPrice = position.exitPrice ?? null;
+              const exitValue = exitPrice !== null ? exitPrice * position.qty : null;
+              const realizedPnL =
+                exitValue !== null
+                  ? position.side === 'long'
+                    ? exitValue - cost
+                    : cost - exitValue
+                  : null;
               return (
                 <TableRow key={position.id} hover>
                   <TableCell>
@@ -151,9 +228,25 @@ const PositionTable = ({ positions, loading = false, onEdit }: PositionTableProp
                   <TableCell>{capitalize(position.side)}</TableCell>
                   <TableCell align="right">{position.qty.toLocaleString()}</TableCell>
                   <TableCell align="right">{formatCurrency(position.entryPrice)}</TableCell>
+                  {variant === 'closed' && (
+                    <TableCell align="right">{formatCurrency(exitPrice)}</TableCell>
+                  )}
                   <TableCell align="right">{formatCurrency(cost)}</TableCell>
+                  {variant === 'closed' && (
+                    <>
+                      <TableCell align="right">{formatCurrency(exitValue)}</TableCell>
+                      <TableCell align="right">{formatSignedCurrency(realizedPnL)}</TableCell>
+                    </>
+                  )}
                   <TableCell sx={{ maxWidth: 260 }}>{position.notes?.trim() ? position.notes : '—'}</TableCell>
-                  <TableCell>{formatDate(position.createdAt)}</TableCell>
+                  {variant === 'closed' ? (
+                    <>
+                      <TableCell>{position.closedAt ? formatDate(position.closedAt) : '—'}</TableCell>
+                      <TableCell>{formatDate(position.createdAt)}</TableCell>
+                    </>
+                  ) : (
+                    <TableCell>{formatDate(position.createdAt)}</TableCell>
+                  )}
                   {onEdit && (
                     <TableCell align="right">
                       <Tooltip title="Edit position">

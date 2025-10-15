@@ -10,6 +10,9 @@ import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import EditIcon from '@mui/icons-material/Edit';
 import { alpha } from '@mui/material/styles';
 
 export type Position = {
@@ -25,6 +28,7 @@ export type Position = {
 type PositionTableProps = {
   positions: Position[];
   loading?: boolean;
+  onEdit?: (position: Position) => void;
 };
 
 const formatCurrency = (value: number | null | undefined) =>
@@ -48,7 +52,7 @@ const formatDate = (value: string) => {
 
 const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
-const PositionTable = ({ positions, loading = false }: PositionTableProps): JSX.Element => {
+const PositionTable = ({ positions, loading = false, onEdit }: PositionTableProps): JSX.Element => {
   if (loading && positions.length === 0) {
     return (
       <Paper
@@ -131,6 +135,7 @@ const PositionTable = ({ positions, loading = false }: PositionTableProps): JSX.
               <TableCell align="right">Cost basis</TableCell>
               <TableCell>Notes</TableCell>
               <TableCell>Created</TableCell>
+              {onEdit && <TableCell align="right">Actions</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -149,6 +154,19 @@ const PositionTable = ({ positions, loading = false }: PositionTableProps): JSX.
                   <TableCell align="right">{formatCurrency(cost)}</TableCell>
                   <TableCell sx={{ maxWidth: 260 }}>{position.notes?.trim() ? position.notes : '—'}</TableCell>
                   <TableCell>{formatDate(position.createdAt)}</TableCell>
+                  {onEdit && (
+                    <TableCell align="right">
+                      <Tooltip title="Edit position">
+                        <IconButton
+                          size="small"
+                          aria-label={`Edit ${position.ticker}`}
+                          onClick={() => onEdit(position)}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}

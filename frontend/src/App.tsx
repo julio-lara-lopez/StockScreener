@@ -17,6 +17,7 @@ import LightModeIcon from '@mui/icons-material/LightMode';
 import theme, { createAppTheme } from './theme';
 import PositionForm, { PositionFormValues } from './components/PositionForm';
 import PositionTable, { Position } from './components/PositionTable';
+import EditPositionDialog from './components/EditPositionDialog';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -45,7 +46,9 @@ function App(): JSX.Element {
   const [useDarkMode, setUseDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingPosition, setEditingPosition] = useState<Position | null>(null);
 
   const activeTheme = useMemo(() => (useDarkMode ? createAppTheme('dark') : theme), [useDarkMode]);
 
@@ -116,6 +119,58 @@ function App(): JSX.Element {
     []
   );
 
+  const handleEditPosition = useCallback((position: Position) => {
+    setError(null);
+    setEditingPosition(position);
+  }, []);
+
+  const handleUpdatePosition = useCallback(
+    async (id: number, values: PositionFormValues) => {
+      setError(null);
+      setIsUpdating(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/positions/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ticker: values.ticker,
+            side: values.side,
+            qty: values.qty,
+            entry_price: values.entryPrice,
+            notes: values.notes?.trim() ? values.notes.trim() : null
+          })
+        });
+
+        if (!response.ok) {
+          let message = 'Unable to update the position.';
+          try {
+            const body = await response.json();
+            if (body?.detail) {
+              message = typeof body.detail === 'string' ? body.detail : message;
+            }
+          } catch {
+            // ignore JSON parse errors
+          }
+          throw new Error(message);
+        }
+
+        const payload: ApiPosition = await response.json();
+        setPositions((prev) => prev.map((position) => (position.id === id ? mapPosition(payload) : position)));
+        setEditingPosition(null);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Unexpected error while updating the position.';
+        setError(message);
+        throw err instanceof Error ? err : new Error(message);
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    []
+  );
+
   return (
     <ThemeProvider theme={activeTheme}>
       <CssBaseline />
@@ -162,11 +217,23 @@ function App(): JSX.Element {
                 </Box>
               </Stack>
               <Divider sx={{ mb: 2 }} />
-              <PositionTable positions={positions} loading={isLoading} />
+              <PositionTable positions={positions} loading={isLoading} onEdit={handleEditPosition} />
             </Paper>
           </Stack>
         </Container>
       </Box>
+      <EditPositionDialog
+        open={Boolean(editingPosition)}
+        position={editingPosition}
+        onClose={() => setEditingPosition(null)}
+        onSubmit={async (values) => {
+          if (!editingPosition) {
+            return;
+          }
+          await handleUpdatePosition(editingPosition.id, values);
+        }}
+        isSubmitting={isUpdating}
+      />
     </ThemeProvider>
   );
 }

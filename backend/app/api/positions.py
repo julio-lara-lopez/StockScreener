@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Position
@@ -31,3 +31,28 @@ def list_positions(db: Session = Depends(get_db)):
         )
         for r in rows
     ]
+
+
+@router.put("/{position_id}", response_model=PositionOut)
+def update_position(
+    position_id: int, payload: PositionIn, db: Session = Depends(get_db)
+):
+    position = db.query(Position).filter(Position.id == position_id).first()
+    if position is None:
+        raise HTTPException(status_code=404, detail="Position not found")
+
+    for field, value in payload.dict().items():
+        setattr(position, field, value)
+
+    db.commit()
+    db.refresh(position)
+
+    return PositionOut(
+        id=position.id,
+        created_at=position.created_at,
+        ticker=position.ticker,
+        side=position.side,
+        qty=float(position.qty),
+        entry_price=float(position.entry_price),
+        notes=position.notes,
+    )

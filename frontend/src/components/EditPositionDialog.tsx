@@ -8,6 +8,8 @@ import Grid from '@mui/material/Unstable_Grid2';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
 import { Position } from './PositionTable';
 import { PositionFormValues } from './PositionForm';
 
@@ -17,6 +19,9 @@ type FormState = {
   qty: string;
   entryPrice: string;
   notes: string;
+  exitPrice: string;
+  closedAt: string;
+  isClosed: boolean;
 };
 
 type EditPositionDialogProps = {
@@ -37,7 +42,35 @@ const emptyState: FormState = {
   side: 'long',
   qty: '',
   entryPrice: '',
-  notes: ''
+  notes: '',
+  exitPrice: '',
+  closedAt: '',
+  isClosed: false
+};
+
+const padNumber = (value: number) => value.toString().padStart(2, '0');
+
+const formatDateTimeLocal = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+  const year = parsed.getFullYear();
+  const month = padNumber(parsed.getMonth() + 1);
+  const day = padNumber(parsed.getDate());
+  const hours = padNumber(parsed.getHours());
+  const minutes = padNumber(parsed.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+const nowDateTimeLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = padNumber(now.getMonth() + 1);
+  const day = padNumber(now.getDate());
+  const hours = padNumber(now.getHours());
+  const minutes = padNumber(now.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
 const EditPositionDialog = ({
@@ -56,7 +89,13 @@ const EditPositionDialog = ({
         side: position.side,
         qty: position.qty.toString(),
         entryPrice: position.entryPrice.toString(),
-        notes: position.notes ?? ''
+        notes: position.notes ?? '',
+        exitPrice:
+          position.exitPrice === null || position.exitPrice === undefined
+            ? ''
+            : position.exitPrice.toString(),
+        closedAt: position.closedAt ? formatDateTimeLocal(position.closedAt) : '',
+        isClosed: position.status === 'closed'
       });
     } else if (!open) {
       setValues(emptyState);
@@ -78,6 +117,16 @@ const EditPositionDialog = ({
     }));
   };
 
+  const handleToggleClosed = (event: ChangeEvent<HTMLInputElement>) => {
+    const { checked } = event.target;
+    setValues((prev) => ({
+      ...prev,
+      isClosed: checked,
+      closedAt: checked ? prev.closedAt || nowDateTimeLocal() : '',
+      exitPrice: checked ? prev.exitPrice : ''
+    }));
+  };
+
   const parseNumber = (value: string): number | null => {
     if (value.trim() === '') {
       return null;
@@ -95,6 +144,12 @@ const EditPositionDialog = ({
 
     const qty = parseNumber(values.qty);
     const entryPrice = parseNumber(values.entryPrice);
+    const exitPrice = values.isClosed ? parseNumber(values.exitPrice) : null;
+    const closedAtIso = values.isClosed
+      ? values.closedAt
+        ? new Date(values.closedAt).toISOString()
+        : new Date().toISOString()
+      : null;
 
     if (!values.ticker.trim() || qty === null || qty <= 0 || entryPrice === null || entryPrice <= 0) {
       return;
@@ -105,7 +160,9 @@ const EditPositionDialog = ({
       side: values.side,
       qty,
       entryPrice,
-      notes: values.notes.trim() ? values.notes.trim() : undefined
+      notes: values.notes.trim() ? values.notes.trim() : undefined,
+      exitPrice: values.isClosed ? exitPrice : null,
+      closedAt: values.isClosed ? closedAtIso : null
     };
 
     try {
@@ -189,6 +246,40 @@ const EditPositionDialog = ({
                 minRows={2}
               />
             </Grid>
+            <Grid xs={12}>
+              <FormControlLabel
+                control={<Switch checked={values.isClosed} onChange={handleToggleClosed} />}
+                label="Mark position as closed"
+              />
+            </Grid>
+            {values.isClosed && (
+              <>
+                <Grid xs={6} md={3}>
+                  <TextField
+                    label="Exit price"
+                    name="exitPrice"
+                    type="number"
+                    inputProps={{ min: 0, step: 0.0001 }}
+                    value={values.exitPrice}
+                    onChange={handleChange}
+                    fullWidth
+                    disabled={isSubmitting}
+                  />
+                </Grid>
+                <Grid xs={12} md={5}>
+                  <TextField
+                    label="Closed at"
+                    name="closedAt"
+                    type="datetime-local"
+                    value={values.closedAt}
+                    onChange={handleChange}
+                    fullWidth
+                    disabled={isSubmitting}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+              </>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions>

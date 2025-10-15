@@ -12,6 +12,8 @@ import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Alert from '@mui/material/Alert';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import theme, { createAppTheme } from './theme';
@@ -29,6 +31,9 @@ type ApiPosition = {
   qty: number;
   entry_price: number;
   notes?: string | null;
+  exit_price?: number | null;
+  closed_at?: string | null;
+  status: 'open' | 'closed';
 };
 
 const mapPosition = (position: ApiPosition): Position => ({
@@ -38,11 +43,18 @@ const mapPosition = (position: ApiPosition): Position => ({
   qty: Number(position.qty),
   entryPrice: Number(position.entry_price),
   createdAt: position.created_at,
-  notes: position.notes ?? ''
+  notes: position.notes ?? '',
+  exitPrice:
+    position.exit_price === null || position.exit_price === undefined
+      ? null
+      : Number(position.exit_price),
+  closedAt: position.closed_at ?? null,
+  status: position.status
 });
 
 function App(): JSX.Element {
   const [positions, setPositions] = useState<Position[]>([]);
+  const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
   const [useDarkMode, setUseDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,11 +64,21 @@ function App(): JSX.Element {
 
   const activeTheme = useMemo(() => (useDarkMode ? createAppTheme('dark') : theme), [useDarkMode]);
 
+  const openPositions = useMemo(
+    () => positions.filter((position) => position.status === 'open'),
+    [positions]
+  );
+
+  const closedPositions = useMemo(
+    () => positions.filter((position) => position.status === 'closed'),
+    [positions]
+  );
+
   const fetchPositions = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/positions`);
+      const response = await fetch(`${API_BASE_URL}/api/positions?status=all`);
       if (!response.ok) {
         throw new Error('Failed to load positions from the server.');
       }
@@ -139,7 +161,9 @@ function App(): JSX.Element {
             side: values.side,
             qty: values.qty,
             entry_price: values.entryPrice,
-            notes: values.notes?.trim() ? values.notes.trim() : null
+            notes: values.notes?.trim() ? values.notes.trim() : null,
+            exit_price: values.exitPrice ?? null,
+            closed_at: values.closedAt ?? null
           })
         });
 
@@ -156,8 +180,8 @@ function App(): JSX.Element {
           throw new Error(message);
         }
 
-        const payload: ApiPosition = await response.json();
-        setPositions((prev) => prev.map((position) => (position.id === id ? mapPosition(payload) : position)));
+        await response.json();
+        await fetchPositions();
         setEditingPosition(null);
       } catch (err) {
         const message =
@@ -168,7 +192,7 @@ function App(): JSX.Element {
         setIsUpdating(false);
       }
     },
-    []
+    [fetchPositions]
   );
 
   return (
@@ -210,14 +234,28 @@ function App(): JSX.Element {
                     Positions overview
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {positions.length === 0
+                    {openPositions.length === 0 && closedPositions.length === 0
                       ? 'No positions added yet. Use the form above to create your first entry.'
-                      : 'Track current exposure, cost basis, and targets at a glance.'}
+                      : 'Track current exposure, cost basis, and realized performance at a glance.'}
                   </Typography>
                 </Box>
               </Stack>
               <Divider sx={{ mb: 2 }} />
-              <PositionTable positions={positions} loading={isLoading} onEdit={handleEditPosition} />
+              <Tabs
+                value={activeTab}
+                onChange={(_, value: 'open' | 'closed') => setActiveTab(value)}
+                aria-label="Position status tabs"
+                sx={{ px: { xs: 1, md: 0 }, mb: 2 }}
+              >
+                <Tab label={`Open (${openPositions.length})`} value="open" />
+                <Tab label={`Closed (${closedPositions.length})`} value="closed" />
+              </Tabs>
+              <PositionTable
+                positions={activeTab === 'open' ? openPositions : closedPositions}
+                variant={activeTab}
+                loading={isLoading}
+                onEdit={handleEditPosition}
+              />
             </Paper>
           </Stack>
         </Container>

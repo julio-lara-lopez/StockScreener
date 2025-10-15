@@ -1,41 +1,59 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Literal
 from ..db import get_db
 from ..models import Position
-from ..schemas import PositionIn, PositionOut
+from ..schemas import PositionCreate, PositionOut, PositionUpdate
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 
 
+def serialize_position(position: Position) -> PositionOut:
+    exit_price = (
+        float(position.exit_price) if position.exit_price is not None else None
+    )
+    return PositionOut(
+        id=position.id,
+        created_at=position.created_at,
+        ticker=position.ticker,
+        side=position.side,
+        qty=float(position.qty),
+        entry_price=float(position.entry_price),
+        exit_price=exit_price,
+        notes=position.notes,
+        closed_at=position.closed_at,
+        status="closed" if position.closed_at else "open",
+    )
+
+
 @router.post("", response_model=PositionOut)
-def create_position(payload: PositionIn, db: Session = Depends(get_db)):
+def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
     p = Position(**payload.dict())
     db.add(p)
     db.commit()
     db.refresh(p)
-    return PositionOut(id=p.id, created_at=p.created_at, **payload.dict())
+    return serialize_position(p)
 
 
 @router.get("", response_model=list[PositionOut])
-def list_positions(db: Session = Depends(get_db)):
-    rows = db.query(Position).order_by(Position.created_at.desc()).all()
-    return [
-        PositionOut(
-            id=r.id,
-            created_at=r.created_at,
-            ticker=r.ticker,
-            side=r.side,
-            qty=float(r.qty),
-            entry_price=float(r.entry_price),
-            notes=r.notes,
-        )
-        for r in rows
-    ]
+def list_positions(
+    status: Literal["open", "closed", "all"] = Query("open"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Position).order_by(Position.created_at.desc())
+
+    if status == "open":
+        query = query.filter(Position.closed_at.is_(None))
+    elif status == "closed":
+        query = query.filter(Position.closed_at.isnot(None))
+
+    rows = query.all()
+    return [serialize_position(r) for r in rows]
 
 
 @router.put("/{position_id}", response_model=PositionOut)
 def update_position(
-    position_id: int, payload: PositionIn, db: Session = Depends(get_db)
+    position_id: int, payload: PositionUpdate, db: Session = Depends(get_db)
 ):
     position = db.query(Position).filter(Position.id == position_id).first()
     if position is None:
@@ -47,12 +65,4 @@ def update_position(
     db.commit()
     db.refresh(position)
 
-    return PositionOut(
-        id=position.id,
-        created_at=position.created_at,
-        ticker=position.ticker,
-        side=position.side,
-        qty=float(position.qty),
-        entry_price=float(position.entry_price),
-        notes=position.notes,
-    )
+    return serialize_position(position)

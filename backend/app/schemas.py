@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Literal
 from uuid import UUID
 from datetime import datetime
 
@@ -29,7 +29,7 @@ class CandidateDTO(BaseModel):
     reasons: Any
 
 
-class PositionIn(BaseModel):
+class PositionBase(BaseModel):
     ticker: str
     side: str
     qty: float
@@ -37,9 +37,21 @@ class PositionIn(BaseModel):
     notes: Optional[str] = None
 
 
-class PositionOut(PositionIn):
+class PositionCreate(PositionBase):
+    pass
+
+
+class PositionUpdate(PositionBase):
+    exit_price: Optional[float] = None
+    closed_at: Optional[datetime] = None
+
+
+class PositionOut(PositionBase):
     id: int
     created_at: datetime
+    exit_price: Optional[float] = None
+    closed_at: Optional[datetime] = None
+    status: Literal["open", "closed"]
 
 
 class AlertIn(BaseModel):

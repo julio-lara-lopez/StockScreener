@@ -126,7 +126,7 @@ const PositionForm = ({ onSubmit, isSubmitting = false }: PositionFormProps): JS
                 label="Quantity"
                 name="qty"
                 type="number"
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.0001 }}
                 value={values.qty}
                 onChange={handleChange}
                 required
@@ -138,7 +138,7 @@ const PositionForm = ({ onSubmit, isSubmitting = false }: PositionFormProps): JS
                 label="Entry price"
                 name="entryPrice"
                 type="number"
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.0001 }}
                 value={values.entryPrice}
                 onChange={handleChange}
                 required

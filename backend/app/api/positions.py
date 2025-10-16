@@ -15,6 +15,23 @@ def serialize_position(position: Position) -> PositionOut:
     current_price = (
         float(position.current_price) if position.current_price is not None else None
     )
+    qty = float(position.qty)
+    entry_price = float(position.entry_price)
+
+    unrealized_pnl = None
+    unrealized_pct = None
+
+    if position.closed_at is None and current_price is not None:
+        side = (position.side or "").lower()
+        if side == "short":
+            unrealized_pnl = (entry_price - current_price) * qty
+            if entry_price:
+                unrealized_pct = ((entry_price - current_price) / entry_price) * 100.0
+        else:
+            unrealized_pnl = (current_price - entry_price) * qty
+            if entry_price:
+                unrealized_pct = ((current_price - entry_price) / entry_price) * 100.0
+
     return PositionOut(
         id=position.id,
         created_at=position.created_at,
@@ -27,6 +44,8 @@ def serialize_position(position: Position) -> PositionOut:
         notes=position.notes,
         closed_at=position.closed_at,
         status="closed" if position.closed_at else "open",
+        unrealized_pnl=unrealized_pnl,
+        unrealized_pct=unrealized_pct,
     )
 
 

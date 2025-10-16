@@ -54,6 +54,8 @@ class PositionOut(PositionBase):
     exit_price: Optional[float] = None
     closed_at: Optional[datetime] = None
     status: Literal["open", "closed"]
+    unrealized_pnl: Optional[float] = None
+    unrealized_pct: Optional[float] = None
 
 
 class PortfolioPoint(BaseModel):

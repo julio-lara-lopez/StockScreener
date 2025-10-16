@@ -35,6 +35,8 @@ type ApiPosition = {
   qty: number;
   entry_price: number;
   current_price: number | null;
+  unrealized_pnl: number | null;
+  unrealized_pct: number | null;
   notes?: string | null;
   exit_price?: number | null;
   closed_at?: string | null;
@@ -67,6 +69,14 @@ const mapPosition = (position: ApiPosition): Position => ({
     position.current_price === null || position.current_price === undefined
       ? null
       : Number(position.current_price),
+  unrealizedPnl:
+    position.unrealized_pnl === null || position.unrealized_pnl === undefined
+      ? null
+      : Number(position.unrealized_pnl),
+  unrealizedPct:
+    position.unrealized_pct === null || position.unrealized_pct === undefined
+      ? null
+      : Number(position.unrealized_pct),
   createdAt: position.created_at,
   notes: position.notes ?? '',
   exitPrice:

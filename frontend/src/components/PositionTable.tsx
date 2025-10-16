@@ -22,6 +22,8 @@ export type Position = {
   qty: number;
   entryPrice: number;
   currentPrice: number | null;
+  unrealizedPnl: number | null;
+  unrealizedPct: number | null;
   createdAt: string;
   notes?: string | null;
   exitPrice?: number | null;
@@ -52,6 +54,16 @@ const formatSignedCurrency = (value: number | null | undefined) =>
         currency: 'USD',
         signDisplay: 'always'
       }).format(value);
+
+const formatSignedPercent = (value: number | null | undefined) =>
+  value === null || value === undefined || Number.isNaN(value)
+    ? '—'
+    : new Intl.NumberFormat('en-US', {
+        style: 'percent',
+        signDisplay: 'always',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value / 100);
 
 const formatDate = (value: string) => {
   const parsed = new Date(value);
@@ -130,15 +142,37 @@ const PositionTable = ({ positions, variant, loading = false, onEdit }: Position
             : cost - exitValue;
       }
 
+      const unrealized = (() => {
+        if (position.unrealizedPnl !== null && position.unrealizedPnl !== undefined) {
+          return position.unrealizedPnl;
+        }
+        if (position.currentPrice === null || position.currentPrice === undefined) {
+          return null;
+        }
+        const currentValue = position.currentPrice * position.qty;
+        return position.side === 'long' ? currentValue - cost : cost - currentValue;
+      })();
+
       return {
         qty: acc.qty + position.qty,
         costBasis: acc.costBasis + cost,
         exitValue: exitValue !== null ? acc.exitValue + exitValue : acc.exitValue,
         realized: realized !== null ? acc.realized + realized : acc.realized,
-        realizedCount: realized !== null ? acc.realizedCount + 1 : acc.realizedCount
+        realizedCount: realized !== null ? acc.realizedCount + 1 : acc.realizedCount,
+        unrealized: unrealized !== null ? acc.unrealized + unrealized : acc.unrealized,
+        unrealizedCount:
+          unrealized !== null ? acc.unrealizedCount + 1 : acc.unrealizedCount
       };
     },
-    { qty: 0, costBasis: 0, exitValue: 0, realized: 0, realizedCount: 0 }
+    {
+      qty: 0,
+      costBasis: 0,
+      exitValue: 0,
+      realized: 0,
+      realizedCount: 0,
+      unrealized: 0,
+      unrealizedCount: 0
+    }
   );
 
   const averageEntryPrice = totals.qty > 0 ? totals.costBasis / totals.qty : 0;
@@ -149,7 +183,14 @@ const PositionTable = ({ positions, variant, loading = false, onEdit }: Position
           { title: 'Open positions', value: positions.length.toString() },
           { title: 'Total quantity', value: totals.qty.toLocaleString() },
           { title: 'Cost basis', value: formatCurrency(totals.costBasis) },
-          { title: 'Avg. entry price', value: formatCurrency(averageEntryPrice) }
+          { title: 'Avg. entry price', value: formatCurrency(averageEntryPrice) },
+          {
+            title: 'Unrealized P&L',
+            value:
+              totals.unrealizedCount > 0
+                ? formatSignedCurrency(totals.unrealized)
+                : '—'
+          }
         ]
       : [
           { title: 'Closed positions', value: positions.length.toString() },
@@ -182,32 +223,39 @@ const PositionTable = ({ positions, variant, loading = false, onEdit }: Position
       </Box>
       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
         <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Ticker</TableCell>
-              <TableCell>Side</TableCell>
-              <TableCell align="right">Quantity</TableCell>
-              <TableCell align="right">Entry price</TableCell>
-              {variant === 'closed' && <TableCell align="right">Exit price</TableCell>}
-              <TableCell align="right">Cost basis</TableCell>
-              {variant === 'closed' && (
-                <>
-                  <TableCell align="right">Exit value</TableCell>
-                  <TableCell align="right">Realized P&L</TableCell>
-                </>
-              )}
-              <TableCell>Notes</TableCell>
-              {variant === 'closed' ? (
-                <>
-                  <TableCell>Closed</TableCell>
-                  <TableCell>Opened</TableCell>
-                </>
-              ) : (
-                <TableCell>Created</TableCell>
-              )}
-              {onEdit && <TableCell align="right">Actions</TableCell>}
-            </TableRow>
-          </TableHead>
+            <TableHead>
+              <TableRow>
+                <TableCell>Ticker</TableCell>
+                <TableCell>Side</TableCell>
+                <TableCell align="right">Quantity</TableCell>
+                <TableCell align="right">Entry price</TableCell>
+                {variant === 'open' && <TableCell align="right">Current price</TableCell>}
+                {variant === 'closed' && <TableCell align="right">Exit price</TableCell>}
+                <TableCell align="right">Cost basis</TableCell>
+                {variant === 'open' && (
+                  <>
+                    <TableCell align="right">Unrealized P&amp;L</TableCell>
+                    <TableCell align="right">% gain/loss</TableCell>
+                  </>
+                )}
+                {variant === 'closed' && (
+                  <>
+                    <TableCell align="right">Exit value</TableCell>
+                    <TableCell align="right">Realized P&amp;L</TableCell>
+                  </>
+                )}
+                <TableCell>Notes</TableCell>
+                {variant === 'closed' ? (
+                  <>
+                    <TableCell>Closed</TableCell>
+                    <TableCell>Opened</TableCell>
+                  </>
+                ) : (
+                  <TableCell>Created</TableCell>
+                )}
+                {onEdit && <TableCell align="right">Actions</TableCell>}
+              </TableRow>
+            </TableHead>
           <TableBody>
             {positions.map((position) => {
               const cost = position.qty * position.entryPrice;
@@ -219,50 +267,59 @@ const PositionTable = ({ positions, variant, loading = false, onEdit }: Position
                     ? exitValue - cost
                     : cost - exitValue
                   : null;
-              return (
-                <TableRow key={position.id} hover>
-                  <TableCell>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Chip label={position.ticker} color="primary" size="small" />
-                    </Stack>
-                  </TableCell>
-                  <TableCell>{capitalize(position.side)}</TableCell>
-                  <TableCell align="right">{position.qty.toLocaleString()}</TableCell>
-                  <TableCell align="right">{formatCurrency(position.entryPrice)}</TableCell>
-                  {variant === 'closed' && (
-                    <TableCell align="right">{formatCurrency(exitPrice)}</TableCell>
-                  )}
-                  <TableCell align="right">{formatCurrency(cost)}</TableCell>
-                  {variant === 'closed' && (
-                    <>
-                      <TableCell align="right">{formatCurrency(exitValue)}</TableCell>
-                      <TableCell align="right">{formatSignedCurrency(realizedPnL)}</TableCell>
-                    </>
-                  )}
-                  <TableCell sx={{ maxWidth: 260 }}>{position.notes?.trim() ? position.notes : '—'}</TableCell>
-                  {variant === 'closed' ? (
-                    <>
-                      <TableCell>{position.closedAt ? formatDate(position.closedAt) : '—'}</TableCell>
-                      <TableCell>{formatDate(position.createdAt)}</TableCell>
-                    </>
-                  ) : (
-                    <TableCell>{formatDate(position.createdAt)}</TableCell>
-                  )}
-                  {onEdit && (
-                    <TableCell align="right">
-                      <Tooltip title="Edit position">
-                        <IconButton
-                          size="small"
-                          aria-label={`Edit ${position.ticker}`}
-                          onClick={() => onEdit(position)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                return (
+                  <TableRow key={position.id} hover>
+                    <TableCell>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Chip label={position.ticker} color="primary" size="small" />
+                      </Stack>
                     </TableCell>
-                  )}
-                </TableRow>
-              );
+                    <TableCell>{capitalize(position.side)}</TableCell>
+                    <TableCell align="right">{position.qty.toLocaleString()}</TableCell>
+                    <TableCell align="right">{formatCurrency(position.entryPrice)}</TableCell>
+                    {variant === 'open' && (
+                      <TableCell align="right">{formatCurrency(position.currentPrice)}</TableCell>
+                    )}
+                    {variant === 'closed' && (
+                      <TableCell align="right">{formatCurrency(exitPrice)}</TableCell>
+                    )}
+                    <TableCell align="right">{formatCurrency(cost)}</TableCell>
+                    {variant === 'open' && (
+                      <>
+                        <TableCell align="right">{formatSignedCurrency(position.unrealizedPnl)}</TableCell>
+                        <TableCell align="right">{formatSignedPercent(position.unrealizedPct)}</TableCell>
+                      </>
+                    )}
+                    {variant === 'closed' && (
+                      <>
+                        <TableCell align="right">{formatCurrency(exitValue)}</TableCell>
+                        <TableCell align="right">{formatSignedCurrency(realizedPnL)}</TableCell>
+                      </>
+                    )}
+                    <TableCell sx={{ maxWidth: 260 }}>{position.notes?.trim() ? position.notes : '—'}</TableCell>
+                    {variant === 'closed' ? (
+                      <>
+                        <TableCell>{position.closedAt ? formatDate(position.closedAt) : '—'}</TableCell>
+                        <TableCell>{formatDate(position.createdAt)}</TableCell>
+                      </>
+                    ) : (
+                      <TableCell>{formatDate(position.createdAt)}</TableCell>
+                    )}
+                    {onEdit && (
+                      <TableCell align="right">
+                        <Tooltip title="Edit position">
+                          <IconButton
+                            size="small"
+                            aria-label={`Edit ${position.ticker}`}
+                            onClick={() => onEdit(position)}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
             })}
           </TableBody>
         </Table>

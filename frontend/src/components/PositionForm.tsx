@@ -14,6 +14,7 @@ export type PositionFormValues = {
   qty: number;
   entryPrice: number;
   currentPrice?: number | null;
+  createdAt?: string | null;
   notes?: string;
   exitPrice?: number | null;
   closedAt?: string | null;

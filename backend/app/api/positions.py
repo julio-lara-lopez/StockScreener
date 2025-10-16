@@ -32,7 +32,7 @@ def serialize_position(position: Position) -> PositionOut:
 
 @router.post("", response_model=PositionOut)
 def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
-    data = payload.dict()
+    data = payload.dict(exclude_unset=True)
     if data.get("current_price") is None:
         data["current_price"] = data["entry_price"]
     p = Position(**data)
@@ -66,7 +66,7 @@ def update_position(
     if position is None:
         raise HTTPException(status_code=404, detail="Position not found")
 
-    data = payload.dict()
+    data = payload.dict(exclude_unset=True)
     if data.get("current_price") is None and data.get("entry_price") is not None:
         data["current_price"] = data["entry_price"]
     if data.get("exit_price") is not None:

@@ -45,6 +45,7 @@ class PositionCreate(PositionBase):
 class PositionUpdate(PositionBase):
     exit_price: Optional[float] = None
     closed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
 
 class PositionOut(PositionBase):

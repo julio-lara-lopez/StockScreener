@@ -19,6 +19,7 @@ type FormState = {
   qty: string;
   entryPrice: string;
   currentPrice: string;
+  entryDate: string;
   notes: string;
   exitPrice: string;
   closedAt: string;
@@ -44,6 +45,7 @@ const emptyState: FormState = {
   qty: '',
   entryPrice: '',
   currentPrice: '',
+  entryDate: '',
   notes: '',
   exitPrice: '',
   closedAt: '',
@@ -95,6 +97,7 @@ const EditPositionDialog = ({
           position.currentPrice === null || position.currentPrice === undefined
             ? position.entryPrice.toString()
             : position.currentPrice.toString(),
+        entryDate: formatDateTimeLocal(position.createdAt),
         notes: position.notes ?? '',
         exitPrice:
           position.exitPrice === null || position.exitPrice === undefined
@@ -166,12 +169,28 @@ const EditPositionDialog = ({
     const effectiveCurrentPrice =
       values.isClosed && exitPrice !== null ? exitPrice : currentPrice ?? entryPrice;
 
+    const entryDateIso = (() => {
+      if (!values.entryDate) {
+        return position.createdAt;
+      }
+      const parsedEntryDate = new Date(values.entryDate);
+      if (Number.isNaN(parsedEntryDate.getTime())) {
+        return null;
+      }
+      return parsedEntryDate.toISOString();
+    })();
+
+    if (!entryDateIso) {
+      return;
+    }
+
     const payload: PositionFormValues = {
       ticker: values.ticker.trim().toUpperCase(),
       side: values.side,
       qty,
       entryPrice,
       currentPrice: effectiveCurrentPrice,
+      createdAt: entryDateIso,
       notes: values.notes.trim() ? values.notes.trim() : undefined,
       exitPrice: values.isClosed ? exitPrice : null,
       closedAt: values.isClosed ? closedAtIso : null
@@ -244,6 +263,19 @@ const EditPositionDialog = ({
                 required
                 fullWidth
                 disabled={isSubmitting}
+              />
+            </Grid>
+            <Grid xs={12} md={4}>
+              <TextField
+                label="Entry date"
+                name="entryDate"
+                type="datetime-local"
+                value={values.entryDate}
+                onChange={handleChange}
+                fullWidth
+                required
+                disabled={isSubmitting}
+                InputLabelProps={{ shrink: true }}
               />
             </Grid>
             <Grid xs={6} md={2}>

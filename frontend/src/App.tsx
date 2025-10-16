@@ -225,6 +225,7 @@ function App(): JSX.Element {
             qty: values.qty,
             entry_price: values.entryPrice,
             current_price: values.currentPrice ?? values.entryPrice,
+            created_at: values.createdAt ?? null,
             notes: values.notes?.trim() ? values.notes.trim() : null,
             exit_price: values.exitPrice ?? null,
             closed_at: values.closedAt ?? null

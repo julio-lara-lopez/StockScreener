@@ -19,6 +19,7 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
+import type { TooltipProps } from 'recharts';
 
 export type PortfolioSummaryPoint = {
   timestamp: string;
@@ -76,6 +77,22 @@ const formatDateTime = (value: string) => {
     dateStyle: 'medium',
     timeStyle: 'short'
   }).format(date);
+};
+
+type TooltipPayloadItem = {
+  payload?: { tooltipLabel?: string };
+};
+
+const tooltipLabelFormatter: NonNullable<
+  TooltipProps<number | string, string>['labelFormatter']
+> = (label, payload) => {
+  const firstPayload = (payload as (TooltipPayloadItem | undefined)[] | undefined)?.[0];
+
+  if (firstPayload && typeof firstPayload.payload?.tooltipLabel === 'string') {
+    return firstPayload.payload.tooltipLabel;
+  }
+
+  return label;
 };
 
 const PortfolioSummaryCard = ({ summary, loading, error, onRetry }: PortfolioSummaryCardProps) => {
@@ -196,11 +213,7 @@ const PortfolioSummaryCard = ({ summary, loading, error, onRetry }: PortfolioSum
                       };
                       return [formatCurrency(numericValue), labelMap[String(name)] ?? String(name)];
                     }}
-                    labelFormatter={(label, payload) =>
-                      payload && payload[0] && typeof payload[0].payload.tooltipLabel === 'string'
-                        ? payload[0].payload.tooltipLabel
-                        : label
-                    }
+                    labelFormatter={tooltipLabelFormatter}
                   />
                   <Legend />
                   <Area

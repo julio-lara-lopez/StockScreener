@@ -19,6 +19,7 @@ import LightModeIcon from '@mui/icons-material/LightMode';
 import theme, { createAppTheme } from './theme';
 import PositionForm, { PositionFormValues } from './components/PositionForm';
 import PositionTable, { Position } from './components/PositionTable';
+import PositionTargetsTable from './components/PositionTargetsTable';
 import EditPositionDialog from './components/EditPositionDialog';
 import PortfolioSummaryCard, {
   PortfolioSummary,
@@ -103,7 +104,7 @@ const mapPortfolioSummary = (payload: ApiPortfolioSummary): PortfolioSummary => 
 
 function App(): JSX.Element {
   const [positions, setPositions] = useState<Position[]>([]);
-  const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
+  const [activeTab, setActiveTab] = useState<'open' | 'closed' | 'targets'>('open');
   const [useDarkMode, setUseDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -325,19 +326,24 @@ function App(): JSX.Element {
               <Divider sx={{ mb: 2 }} />
               <Tabs
                 value={activeTab}
-                onChange={(_, value: 'open' | 'closed') => setActiveTab(value)}
+                onChange={(_, value: 'open' | 'closed' | 'targets') => setActiveTab(value)}
                 aria-label="Position status tabs"
                 sx={{ px: { xs: 1, md: 0 }, mb: 2 }}
               >
                 <Tab label={`Open (${openPositions.length})`} value="open" />
                 <Tab label={`Closed (${closedPositions.length})`} value="closed" />
+                <Tab label="Profit targets" value="targets" />
               </Tabs>
-              <PositionTable
-                positions={activeTab === 'open' ? openPositions : closedPositions}
-                variant={activeTab}
-                loading={isLoading}
-                onEdit={handleEditPosition}
-              />
+              {activeTab === 'targets' ? (
+                <PositionTargetsTable positions={openPositions} loading={isLoading} />
+              ) : (
+                <PositionTable
+                  positions={activeTab === 'open' ? openPositions : closedPositions}
+                  variant={activeTab === 'open' ? 'open' : 'closed'}
+                  loading={isLoading}
+                  onEdit={handleEditPosition}
+                />
+              )}
             </Paper>
           </Stack>
         </Container>

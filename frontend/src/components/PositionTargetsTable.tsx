@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -14,7 +14,6 @@ import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -48,8 +47,6 @@ const formatDate = (value: string | null | undefined) => {
 type SnackbarState = {
   message: string;
   severity: 'success' | 'info' | 'warning' | 'error';
-  actionLabel?: string;
-  action?: () => Promise<void>;
 };
 
 type ApiAlert = {
@@ -63,20 +60,6 @@ type ApiAlert = {
   last_triggered_at: string | null;
 };
 
-const formatDateTime = (value: string | null | undefined) => {
-  if (!value) {
-    return null;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(parsed);
-};
-
 const PositionTargetsTable = ({
   positions,
   loading = false
@@ -85,20 +68,8 @@ const PositionTargetsTable = ({
   loading?: boolean;
 }): JSX.Element => {
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
-  const [validatingKey, setValidatingKey] = useState<string | null>(null);
-  const [snackbarActionInFlight, setSnackbarActionInFlight] = useState(false);
-
-  const handleSnackbarAction = async () => {
-    if (!snackbar?.action) {
-      return;
-    }
-    setSnackbarActionInFlight(true);
-    try {
-      await snackbar.action();
-    } finally {
-      setSnackbarActionInFlight(false);
-    }
-  };
+  const [alertStatuses, setAlertStatuses] = useState<Record<string, boolean>>({});
+  const [updatingKey, setUpdatingKey] = useState<string | null>(null);
 
   const rows = useMemo(
     () =>
@@ -117,6 +88,112 @@ const PositionTargetsTable = ({
       })),
     [positions]
   );
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadAlertStatuses = async () => {
+      if (positions.length === 0) {
+        if (!ignore) {
+          setAlertStatuses({});
+        }
+        return;
+      }
+
+      const defaults: Record<string, boolean> = {};
+      positions.forEach((position) => {
+        TARGET_PCTS.forEach((pct) => {
+          defaults[`${position.ticker.toUpperCase()}-${pct}`] = false;
+        });
+      });
+
+      try {
+        const uniqueTickers = [...new Set(positions.map((p) => p.ticker.toUpperCase()))];
+        const responses = await Promise.all(
+          uniqueTickers.map(async (ticker) => {
+            const params = new URLSearchParams({
+              active: 'true',
+              ticker,
+              kind: 'target_pct',
+              trailing: 'false'
+            });
+            const response = await fetch(`${API_BASE_URL}/api/alerts?${params.toString()}`);
+            if (!response.ok) {
+              throw new Error('Unable to load alert statuses.');
+            }
+            const data: ApiAlert[] = await response.json();
+            return data;
+          })
+        );
+        responses.flat().forEach((alert) => {
+          const key = `${alert.ticker}-${Number(alert.threshold_value)}`;
+          defaults[key] = alert.active;
+        });
+        if (!ignore) {
+          setAlertStatuses(defaults);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setAlertStatuses(defaults);
+          const message =
+            err instanceof Error
+              ? err.message
+              : 'Unexpected error while loading alert statuses.';
+          setSnackbar({ severity: 'error', message });
+        }
+      }
+    };
+
+    void loadAlertStatuses();
+
+    return () => {
+      ignore = true;
+    };
+  }, [positions]);
+
+  const toggleAlert = async (ticker: string, pct: number, currentlyActive: boolean) => {
+    const normalizedTicker = ticker.toUpperCase();
+    const key = `${normalizedTicker}-${pct}`;
+    setUpdatingKey(key);
+    setSnackbar(null);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/alerts/${currentlyActive ? 'deactivate' : 'activate'}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ticker: normalizedTicker,
+            kind: 'target_pct',
+            threshold_value: pct,
+            trailing: false
+          })
+        }
+      );
+      if (!response.ok) {
+        throw new Error(
+          currentlyActive ? 'Unable to deactivate alert.' : 'Unable to activate alert.'
+        );
+      }
+      const data: ApiAlert = await response.json();
+      setAlertStatuses((prev) => ({
+        ...prev,
+        [key]: data.active
+      }));
+      setSnackbar({
+        severity: 'success',
+        message: `${data.active ? 'Activated' : 'Deactivated'} ${pct}% alert for ${normalizedTicker}.`
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unexpected error while updating alert.';
+      setSnackbar({ severity: 'error', message });
+    } finally {
+      setUpdatingKey((prev) => (prev === key ? null : prev));
+    }
+  };
 
   if (loading && positions.length === 0) {
     return (
@@ -203,109 +280,41 @@ const PositionTargetsTable = ({
                   <TableCell align="right" key={target.pct}>
                     <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
                       <Typography variant="body2">{target.formatted}</Typography>
-                      <Tooltip
-                        title={
-                          validatingKey === `${row.ticker}-${target.pct}`
-                            ? 'Checking existing alerts…'
-                            : `Validate ${target.pct}% alert`
-                        }
-                      >
-                        <IconButton
-                          size="small"
-                          onClick={() =>
-                            void (async () => {
-                              const key = `${row.ticker}-${target.pct}`;
-                              setSnackbar(null);
-                              setValidatingKey(key);
-                              try {
-                                const params = new URLSearchParams({
-                                  active: 'true',
-                                  ticker: row.ticker.toUpperCase(),
-                                  kind: 'target_pct',
-                                  threshold_value: target.pct.toString(),
-                                  trailing: 'false'
-                                });
-                                const response = await fetch(`${API_BASE_URL}/api/alerts?${params.toString()}`);
-                                if (!response.ok) {
-                                  throw new Error('Unable to validate alerts.');
+                      {(() => {
+                        const key = `${row.ticker.toUpperCase()}-${target.pct}`;
+                        const isActive = alertStatuses[key] ?? false;
+                        return (
+                          <Tooltip
+                            title={
+                              updatingKey === key
+                                ? `${isActive ? 'Deactivating' : 'Activating'} alert…`
+                                : `${isActive ? 'Deactivate' : 'Activate'} ${target.pct}% alert`
+                            }
+                          >
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() =>
+                                  void toggleAlert(row.ticker, target.pct, isActive)
                                 }
-                                const data: ApiAlert[] = await response.json();
-                                if (data.length === 0) {
-                                  setSnackbar({
-                                    severity: 'info',
-                                    message: `No active ${target.pct}% alerts exist for ${row.ticker}. You can create one.`,
-                                    actionLabel: `Activate ${target.pct}% alert`,
-                                    action: async () => {
-                                      try {
-                                        const response = await fetch(`${API_BASE_URL}/api/alerts/activate`, {
-                                          method: 'POST',
-                                          headers: {
-                                            'Content-Type': 'application/json'
-                                          },
-                                          body: JSON.stringify({
-                                            ticker: row.ticker.toUpperCase(),
-                                            kind: 'target_pct',
-                                            threshold_value: target.pct,
-                                            trailing: false
-                                          })
-                                        });
-                                        if (!response.ok) {
-                                          throw new Error('Unable to activate alert.');
-                                        }
-                                        await response.json();
-                                        setSnackbar({
-                                          severity: 'success',
-                                          message: `Activated ${target.pct}% alert for ${row.ticker}.`
-                                        });
-                                      } catch (err) {
-                                        const message =
-                                          err instanceof Error
-                                            ? err.message
-                                            : 'Unexpected error while activating alert.';
-                                        setSnackbar({ severity: 'error', message });
-                                      }
-                                    }
-                                  });
-                                } else {
-                                  const mostRecent = data.reduce<ApiAlert | null>((acc, item) => {
-                                    if (!acc) {
-                                      return item;
-                                    }
-                                    return new Date(item.created_at) > new Date(acc.created_at) ? item : acc;
-                                  }, null);
-                                  const created = formatDateTime(mostRecent?.created_at ?? null);
-                                  const lastTriggered = formatDateTime(mostRecent?.last_triggered_at ?? null);
-                                  const details =
-                                    created || lastTriggered
-                                      ? ` (created ${created ?? 'unknown'}${
-                                          lastTriggered ? `, last triggered ${lastTriggered}` : ''
-                                        })`
-                                      : '';
-                                  setSnackbar({
-                                    severity: 'warning',
-                                    message: `Found ${data.length} active ${target.pct}% alert${
-                                      data.length === 1 ? '' : 's'
-                                    } for ${row.ticker}${details}.`
-                                  });
-                                }
-                              } catch (err) {
-                                const message =
-                                  err instanceof Error ? err.message : 'Unexpected error while validating alerts.';
-                                setSnackbar({ severity: 'error', message });
-                              } finally {
-                                setValidatingKey((prev) => (prev === key ? null : prev));
-                              }
-                            })()
-                          }
-                          aria-label={`Validate alert for ${row.ticker} ${target.pct}% target`}
-                        >
-                          {validatingKey === `${row.ticker}-${target.pct}` ? (
-                            <CircularProgress size={16} thickness={5} />
-                          ) : (
-                            <NotificationsActiveIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Tooltip>
+                                aria-label={`${
+                                  isActive ? 'Deactivate' : 'Activate'
+                                } alert for ${row.ticker} ${target.pct}% target`}
+                                disabled={updatingKey === key}
+                              >
+                                {updatingKey === key ? (
+                                  <CircularProgress size={16} thickness={5} />
+                                ) : (
+                                  <NotificationsActiveIcon
+                                    fontSize="small"
+                                    color={isActive ? 'success' : 'disabled'}
+                                  />
+                                )}
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        );
+                      })()}
                     </Stack>
                   </TableCell>
                 ))}
@@ -316,13 +325,8 @@ const PositionTargetsTable = ({
       </TableContainer>
       <Snackbar
         open={Boolean(snackbar)}
-        autoHideDuration={
-          snackbar?.action ? null : snackbar?.severity === 'error' ? 6000 : 4000
-        }
+        autoHideDuration={snackbar?.severity === 'error' ? 6000 : 4000}
         onClose={() => {
-          if (snackbarActionInFlight) {
-            return;
-          }
           setSnackbar(null);
         }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
@@ -330,9 +334,6 @@ const PositionTargetsTable = ({
         {snackbar ? (
           <Alert
             onClose={() => {
-              if (snackbarActionInFlight) {
-                return;
-              }
               setSnackbar(null);
             }}
             severity={snackbar.severity}
@@ -342,20 +343,6 @@ const PositionTargetsTable = ({
               error: undefined,
               info: undefined
             }}
-            action={
-              snackbar.actionLabel ? (
-                <Button
-                  color="inherit"
-                  size="small"
-                  onClick={() => {
-                    void handleSnackbarAction();
-                  }}
-                  disabled={snackbarActionInFlight}
-                >
-                  {snackbarActionInFlight ? 'Activating…' : snackbar.actionLabel}
-                </Button>
-              ) : undefined
-            }
             sx={{ width: '100%' }}
           >
             {snackbar.message}

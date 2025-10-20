@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models import PriceAlert
+from ..models import AlertKind, PriceAlert
 from ..schemas import AlertIn, AlertOut
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
@@ -28,10 +28,25 @@ def create_alert(payload: AlertIn, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[AlertOut])
-def list_alerts(active: bool | None = None, db: Session = Depends(get_db)):
+def list_alerts(
+    active: bool | None = None,
+    ticker: str | None = Query(default=None, min_length=1),
+    kind: AlertKind | None = None,
+    threshold_value: float | None = None,
+    trailing: bool | None = None,
+    db: Session = Depends(get_db),
+):
     q = db.query(PriceAlert)
     if active is not None:
         q = q.filter(PriceAlert.active == active)
+    if ticker:
+        q = q.filter(PriceAlert.ticker == ticker.upper())
+    if kind is not None:
+        q = q.filter(PriceAlert.kind == kind)
+    if threshold_value is not None:
+        q = q.filter(PriceAlert.threshold_value == threshold_value)
+    if trailing is not None:
+        q = q.filter(PriceAlert.trailing == trailing)
     rows = q.order_by(PriceAlert.created_at.desc()).all()
     return [
         AlertOut(

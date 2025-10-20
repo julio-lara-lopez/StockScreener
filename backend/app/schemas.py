@@ -21,6 +21,10 @@ class IngestBatch(BaseModel):
     items: List[RVOLItem]
 
 
+class TestTelegramRequest(BaseModel):
+    message: Optional[str] = None
+
+
 class CandidateDTO(BaseModel):
     ticker: str
     price: float

@@ -7,6 +7,20 @@ from ..schemas import AlertIn, AlertOut
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 
+def _serialize_alert(alert: PriceAlert) -> AlertOut:
+    kind = alert.kind.value if hasattr(alert.kind, "value") else alert.kind
+    return AlertOut(
+        id=alert.id,
+        ticker=alert.ticker,
+        kind=kind,
+        threshold_value=float(alert.threshold_value),
+        trailing=alert.trailing,
+        active=alert.active,
+        created_at=alert.created_at,
+        last_triggered_at=alert.last_triggered_at,
+    )
+
+
 @router.post("", response_model=AlertOut)
 def create_alert(payload: AlertIn, db: Session = Depends(get_db)):
     a = PriceAlert(
@@ -18,13 +32,43 @@ def create_alert(payload: AlertIn, db: Session = Depends(get_db)):
     db.add(a)
     db.commit()
     db.refresh(a)
-    return AlertOut(
-        id=a.id,
-        active=a.active,
-        created_at=a.created_at,
-        last_triggered_at=a.last_triggered_at,
-        **payload.dict(),
+    return _serialize_alert(a)
+
+
+@router.post("/activate", response_model=AlertOut)
+def activate_alert(payload: AlertIn, db: Session = Depends(get_db)):
+    normalized_ticker = payload.ticker.upper()
+
+    existing = (
+        db.query(PriceAlert)
+        .filter(
+            PriceAlert.ticker == normalized_ticker,
+            PriceAlert.kind == payload.kind,
+            PriceAlert.threshold_value == payload.threshold_value,
+            PriceAlert.trailing == payload.trailing,
+        )
+        .order_by(PriceAlert.created_at.desc())
+        .first()
     )
+
+    if existing:
+        if not existing.active:
+            existing.active = True
+            db.add(existing)
+        db.commit()
+        db.refresh(existing)
+        return _serialize_alert(existing)
+
+    new_alert = PriceAlert(
+        ticker=normalized_ticker,
+        kind=payload.kind,
+        threshold_value=payload.threshold_value,
+        trailing=payload.trailing,
+    )
+    db.add(new_alert)
+    db.commit()
+    db.refresh(new_alert)
+    return _serialize_alert(new_alert)
 
 
 @router.get("", response_model=list[AlertOut])
@@ -48,16 +92,4 @@ def list_alerts(
     if trailing is not None:
         q = q.filter(PriceAlert.trailing == trailing)
     rows = q.order_by(PriceAlert.created_at.desc()).all()
-    return [
-        AlertOut(
-            id=r.id,
-            ticker=r.ticker,
-            kind=r.kind.value if hasattr(r.kind, "value") else r.kind,
-            threshold_value=float(r.threshold_value),
-            trailing=r.trailing,
-            active=r.active,
-            created_at=r.created_at,
-            last_triggered_at=r.last_triggered_at,
-        )
-        for r in rows
-    ]
+    return [_serialize_alert(r) for r in rows]

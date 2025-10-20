@@ -14,6 +14,7 @@ import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -47,6 +48,8 @@ const formatDate = (value: string | null | undefined) => {
 type SnackbarState = {
   message: string;
   severity: 'success' | 'info' | 'warning' | 'error';
+  actionLabel?: string;
+  action?: () => Promise<void>;
 };
 
 type ApiAlert = {
@@ -83,6 +86,19 @@ const PositionTargetsTable = ({
 }): JSX.Element => {
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
   const [validatingKey, setValidatingKey] = useState<string | null>(null);
+  const [snackbarActionInFlight, setSnackbarActionInFlight] = useState(false);
+
+  const handleSnackbarAction = async () => {
+    if (!snackbar?.action) {
+      return;
+    }
+    setSnackbarActionInFlight(true);
+    try {
+      await snackbar.action();
+    } finally {
+      setSnackbarActionInFlight(false);
+    }
+  };
 
   const rows = useMemo(
     () =>
@@ -216,8 +232,39 @@ const PositionTargetsTable = ({
                                 const data: ApiAlert[] = await response.json();
                                 if (data.length === 0) {
                                   setSnackbar({
-                                    severity: 'success',
-                                    message: `No active ${target.pct}% alerts exist for ${row.ticker}. You can create one.`
+                                    severity: 'info',
+                                    message: `No active ${target.pct}% alerts exist for ${row.ticker}. You can create one.`,
+                                    actionLabel: `Activate ${target.pct}% alert`,
+                                    action: async () => {
+                                      try {
+                                        const response = await fetch(`${API_BASE_URL}/api/alerts/activate`, {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json'
+                                          },
+                                          body: JSON.stringify({
+                                            ticker: row.ticker.toUpperCase(),
+                                            kind: 'target_pct',
+                                            threshold_value: target.pct,
+                                            trailing: false
+                                          })
+                                        });
+                                        if (!response.ok) {
+                                          throw new Error('Unable to activate alert.');
+                                        }
+                                        await response.json();
+                                        setSnackbar({
+                                          severity: 'success',
+                                          message: `Activated ${target.pct}% alert for ${row.ticker}.`
+                                        });
+                                      } catch (err) {
+                                        const message =
+                                          err instanceof Error
+                                            ? err.message
+                                            : 'Unexpected error while activating alert.';
+                                        setSnackbar({ severity: 'error', message });
+                                      }
+                                    }
                                   });
                                 } else {
                                   const mostRecent = data.reduce<ApiAlert | null>((acc, item) => {
@@ -269,13 +316,25 @@ const PositionTargetsTable = ({
       </TableContainer>
       <Snackbar
         open={Boolean(snackbar)}
-        autoHideDuration={snackbar?.severity === 'error' ? 6000 : 4000}
-        onClose={() => setSnackbar(null)}
+        autoHideDuration={
+          snackbar?.action ? null : snackbar?.severity === 'error' ? 6000 : 4000
+        }
+        onClose={() => {
+          if (snackbarActionInFlight) {
+            return;
+          }
+          setSnackbar(null);
+        }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         {snackbar ? (
           <Alert
-            onClose={() => setSnackbar(null)}
+            onClose={() => {
+              if (snackbarActionInFlight) {
+                return;
+              }
+              setSnackbar(null);
+            }}
             severity={snackbar.severity}
             iconMapping={{
               success: <CheckCircleIcon fontSize="small" />,
@@ -283,6 +342,20 @@ const PositionTargetsTable = ({
               error: undefined,
               info: undefined
             }}
+            action={
+              snackbar.actionLabel ? (
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    void handleSnackbarAction();
+                  }}
+                  disabled={snackbarActionInFlight}
+                >
+                  {snackbarActionInFlight ? 'Activating…' : snackbar.actionLabel}
+                </Button>
+              ) : undefined
+            }
             sx={{ width: '100%' }}
           >
             {snackbar.message}

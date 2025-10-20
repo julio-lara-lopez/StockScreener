@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import AlertKind, PriceAlert
@@ -69,6 +69,36 @@ def activate_alert(payload: AlertIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_alert)
     return _serialize_alert(new_alert)
+
+
+@router.post("/deactivate", response_model=AlertOut)
+def deactivate_alert(payload: AlertIn, db: Session = Depends(get_db)):
+    normalized_ticker = payload.ticker.upper()
+
+    existing = (
+        db.query(PriceAlert)
+        .filter(
+            PriceAlert.ticker == normalized_ticker,
+            PriceAlert.kind == payload.kind,
+            PriceAlert.threshold_value == payload.threshold_value,
+            PriceAlert.trailing == payload.trailing,
+        )
+        .order_by(PriceAlert.created_at.desc())
+        .first()
+    )
+
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Alert not found.")
+
+    if existing.active:
+        existing.active = False
+        db.add(existing)
+        db.commit()
+        db.refresh(existing)
+    else:
+        db.commit()
+
+    return _serialize_alert(existing)
 
 
 @router.get("", response_model=list[AlertOut])

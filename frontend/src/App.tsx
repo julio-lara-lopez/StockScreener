@@ -127,9 +127,14 @@ function App(): JSX.Element {
     [positions]
   );
 
-  const fetchPositions = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const fetchPositions = useCallback(async (options?: { showLoader?: boolean }) => {
+    const showLoader = options?.showLoader ?? true;
+
+    if (showLoader) {
+      setIsLoading(true);
+      setError(null);
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/positions?status=all`);
       if (!response.ok) {
@@ -141,7 +146,9 @@ function App(): JSX.Element {
       const message = err instanceof Error ? err.message : 'Unexpected error while loading positions.';
       setError(message);
     } finally {
-      setIsLoading(false);
+      if (showLoader) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -167,6 +174,20 @@ function App(): JSX.Element {
     void fetchPositions();
     void fetchPortfolioSummary();
   }, [fetchPositions, fetchPortfolioSummary]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void fetchPositions({ showLoader: false });
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchPositions]);
 
   const handleAddPosition = useCallback(
     async (values: PositionFormValues) => {

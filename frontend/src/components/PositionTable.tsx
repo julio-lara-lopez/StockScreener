@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -14,6 +15,7 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import EditIcon from '@mui/icons-material/Edit';
 import { alpha } from '@mui/material/styles';
+import type { Theme } from '@mui/material/styles';
 
 export type Position = {
   id: number;
@@ -37,6 +39,26 @@ type PositionTableProps = {
   loading?: boolean;
   onEdit?: (position: Position) => void;
 };
+
+type PriceDirection = 'up' | 'down';
+
+const getAnimatedCellStyles = (change?: PriceDirection) =>
+  ({ palette }: Theme) => ({
+    transition: 'background-color 0.6s ease, color 0.6s ease',
+    backgroundColor: change
+      ? alpha(
+          change === 'up' ? palette.success.main : palette.error.main,
+          palette.mode === 'light' ? 0.12 : 0.24
+        )
+      : 'transparent',
+    color:
+      change === 'up'
+        ? palette.success.main
+        : change === 'down'
+          ? palette.error.main
+          : palette.text.primary,
+    fontWeight: change ? 600 : undefined
+  });
 
 const formatCurrency = (value: number | null | undefined) =>
   value === null || value === undefined || Number.isNaN(value)
@@ -79,6 +101,63 @@ const formatDate = (value: string) => {
 const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 const PositionTable = ({ positions, variant, loading = false, onEdit }: PositionTableProps): JSX.Element => {
+  const [priceChanges, setPriceChanges] = useState<Record<number, PriceDirection>>({});
+  const previousPricesRef = useRef<Map<number, number | null>>(new Map());
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (variant !== 'open') {
+      previousPricesRef.current.clear();
+      setPriceChanges({});
+      return;
+    }
+
+    const previousPrices = previousPricesRef.current;
+    const updates: Record<number, PriceDirection> = {};
+    const currentIds = new Set<number>();
+
+    positions.forEach((position) => {
+      currentIds.add(position.id);
+      const previous = previousPrices.get(position.id);
+      const current = position.currentPrice;
+
+      if (previous !== undefined && previous !== null && current !== null && current !== previous) {
+        updates[position.id] = current > previous ? 'up' : 'down';
+      }
+
+      previousPrices.set(position.id, current);
+    });
+
+    Array.from(previousPrices.keys()).forEach((id) => {
+      if (!currentIds.has(id)) {
+        previousPrices.delete(id);
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      return;
+    }
+
+    setPriceChanges((prevState) => ({ ...prevState, ...updates }));
+
+    const timeoutId = window.setTimeout(() => {
+      setPriceChanges((prevState) => {
+        const nextState = { ...prevState };
+        Object.keys(updates).forEach((key) => {
+          delete nextState[Number(key)];
+        });
+        return nextState;
+      });
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [positions, variant]);
+
   if (loading && positions.length === 0) {
     return (
       <Paper
@@ -267,59 +346,67 @@ const PositionTable = ({ positions, variant, loading = false, onEdit }: Position
                     ? exitValue - cost
                     : cost - exitValue
                   : null;
-                return (
-                  <TableRow key={position.id} hover>
-                    <TableCell>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Chip label={position.ticker} color="primary" size="small" />
-                      </Stack>
+              const highlight = priceChanges[position.id];
+
+              return (
+                <TableRow key={position.id} hover>
+                  <TableCell>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Chip label={position.ticker} color="primary" size="small" />
+                    </Stack>
+                  </TableCell>
+                  <TableCell>{capitalize(position.side)}</TableCell>
+                  <TableCell align="right">{position.qty.toLocaleString()}</TableCell>
+                  <TableCell align="right">{formatCurrency(position.entryPrice)}</TableCell>
+                  {variant === 'open' && (
+                    <TableCell align="right" sx={getAnimatedCellStyles(highlight)}>
+                      {formatCurrency(position.currentPrice)}
                     </TableCell>
-                    <TableCell>{capitalize(position.side)}</TableCell>
-                    <TableCell align="right">{position.qty.toLocaleString()}</TableCell>
-                    <TableCell align="right">{formatCurrency(position.entryPrice)}</TableCell>
-                    {variant === 'open' && (
-                      <TableCell align="right">{formatCurrency(position.currentPrice)}</TableCell>
-                    )}
-                    {variant === 'closed' && (
-                      <TableCell align="right">{formatCurrency(exitPrice)}</TableCell>
-                    )}
-                    <TableCell align="right">{formatCurrency(cost)}</TableCell>
-                    {variant === 'open' && (
-                      <>
-                        <TableCell align="right">{formatSignedCurrency(position.unrealizedPnl)}</TableCell>
-                        <TableCell align="right">{formatSignedPercent(position.unrealizedPct)}</TableCell>
-                      </>
-                    )}
-                    {variant === 'closed' && (
-                      <>
-                        <TableCell align="right">{formatCurrency(exitValue)}</TableCell>
-                        <TableCell align="right">{formatSignedCurrency(realizedPnL)}</TableCell>
-                      </>
-                    )}
-                    <TableCell sx={{ maxWidth: 260 }}>{position.notes?.trim() ? position.notes : '—'}</TableCell>
-                    {variant === 'closed' ? (
-                      <>
-                        <TableCell>{position.closedAt ? formatDate(position.closedAt) : '—'}</TableCell>
-                        <TableCell>{formatDate(position.createdAt)}</TableCell>
-                      </>
-                    ) : (
-                      <TableCell>{formatDate(position.createdAt)}</TableCell>
-                    )}
-                    {onEdit && (
-                      <TableCell align="right">
-                        <Tooltip title="Edit position">
-                          <IconButton
-                            size="small"
-                            aria-label={`Edit ${position.ticker}`}
-                            onClick={() => onEdit(position)}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                  )}
+                  {variant === 'closed' && (
+                    <TableCell align="right">{formatCurrency(exitPrice)}</TableCell>
+                  )}
+                  <TableCell align="right">{formatCurrency(cost)}</TableCell>
+                  {variant === 'open' && (
+                    <>
+                      <TableCell align="right" sx={getAnimatedCellStyles(highlight)}>
+                        {formatSignedCurrency(position.unrealizedPnl)}
                       </TableCell>
-                    )}
-                  </TableRow>
-                );
+                      <TableCell align="right" sx={getAnimatedCellStyles(highlight)}>
+                        {formatSignedPercent(position.unrealizedPct)}
+                      </TableCell>
+                    </>
+                  )}
+                  {variant === 'closed' && (
+                    <>
+                      <TableCell align="right">{formatCurrency(exitValue)}</TableCell>
+                      <TableCell align="right">{formatSignedCurrency(realizedPnL)}</TableCell>
+                    </>
+                  )}
+                  <TableCell sx={{ maxWidth: 260 }}>{position.notes?.trim() ? position.notes : '—'}</TableCell>
+                  {variant === 'closed' ? (
+                    <>
+                      <TableCell>{position.closedAt ? formatDate(position.closedAt) : '—'}</TableCell>
+                      <TableCell>{formatDate(position.createdAt)}</TableCell>
+                    </>
+                  ) : (
+                    <TableCell>{formatDate(position.createdAt)}</TableCell>
+                  )}
+                  {onEdit && (
+                    <TableCell align="right">
+                      <Tooltip title="Edit position">
+                        <IconButton
+                          size="small"
+                          aria-label={`Edit ${position.ticker}`}
+                          onClick={() => onEdit(position)}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
             })}
           </TableBody>
         </Table>

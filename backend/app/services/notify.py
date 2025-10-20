@@ -11,6 +11,7 @@ def notify_telegram(
     message: str,
     dedupe_key: str,
     ticker: str | None = None,
+    parse_mode: str | None = None,
 ):
     # Idempotency
     existing = (
@@ -23,8 +24,11 @@ def notify_telegram(
     status = NotifyStatus.sent
     error = None
     try:
+        payload = {"chat_id": chat_id, "text": message}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
         with httpx.Client(timeout=10) as client:
-            client.post(url, json={"chat_id": chat_id, "text": message})
+            client.post(url, json=payload)
     except Exception as e:
         status = NotifyStatus.error
         error = str(e)

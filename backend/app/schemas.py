@@ -21,6 +21,24 @@ class IngestBatch(BaseModel):
     items: List[RVOLItem]
 
 
+class ActiveRvolCandidate(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    rvol: Optional[float] = None
+    price: Optional[float] = None
+    pct_change: Optional[float] = None
+    volume: Optional[int] = None
+    market_cap: Optional[int] = None
+    sector: Optional[str] = None
+    analyst_rating: Optional[str] = None
+
+
+class ActiveRvolBatch(BaseModel):
+    batch_id: UUID
+    ingested_at: datetime
+    items: List[ActiveRvolCandidate]
+
+
 class TestTelegramRequest(BaseModel):
     message: Optional[str] = None
 

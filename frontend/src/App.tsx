@@ -30,6 +30,7 @@ import SettingsPage, {
   AppSettings as SettingsData,
   AppSettingsSubmitValues
 } from './pages/SettingsPage';
+import ActiveBatchesPage, { ActiveBatchRow } from './pages/ActiveBatchesPage';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -75,6 +76,24 @@ type ApiSettingsResponse = {
     mode?: 'light' | 'dark';
     primary_color?: string;
   };
+};
+
+type ApiActiveBatchItem = {
+  ticker: string;
+  name: string | null;
+  rvol: number | null;
+  price: number | null;
+  pct_change: number | null;
+  volume: number | null;
+  market_cap: number | null;
+  sector: string | null;
+  analyst_rating: string | null;
+};
+
+type ApiActiveBatch = {
+  batch_id: string;
+  ingested_at: string;
+  items: ApiActiveBatchItem[];
 };
 
 const DEFAULT_THEME_COLOR = '#1976d2';
@@ -133,10 +152,35 @@ const mapAppSettings = (payload: ApiSettingsResponse): SettingsData => ({
   }
 });
 
+const parseOptionalNumber = (value: number | null): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const result = Number(value);
+  return Number.isNaN(result) ? null : result;
+};
+
+const mapActiveBatchRows = (batch: ApiActiveBatch): ActiveBatchRow[] =>
+  batch.items.map<ActiveBatchRow>((item, index) => ({
+    id: `${batch.batch_id}-${item.ticker}-${index}`,
+    batchId: batch.batch_id,
+    ingestedAt: batch.ingested_at,
+    ticker: item.ticker,
+    name: item.name,
+    rvol: parseOptionalNumber(item.rvol),
+    price: parseOptionalNumber(item.price),
+    pctChange: parseOptionalNumber(item.pct_change),
+    volume: item.volume === null || item.volume === undefined ? null : Number(item.volume),
+    marketCap:
+      item.market_cap === null || item.market_cap === undefined ? null : Number(item.market_cap),
+    sector: item.sector,
+    analystRating: item.analyst_rating
+  }));
+
 function App(): JSX.Element {
   const [positions, setPositions] = useState<Position[]>([]);
   const [activeTab, setActiveTab] = useState<'open' | 'closed' | 'targets'>('open');
-  const [activePage, setActivePage] = useState<'dashboard' | 'settings'>('dashboard');
+  const [activePage, setActivePage] = useState<'dashboard' | 'settings' | 'batches'>('dashboard');
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_THEME_COLOR);
   const [appSettings, setAppSettings] = useState<SettingsData | null>(null);
@@ -151,6 +195,9 @@ function App(): JSX.Element {
   const [portfolioSummary, setPortfolioSummary] = useState<PortfolioSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [activeBatchRows, setActiveBatchRows] = useState<ActiveBatchRow[]>([]);
+  const [isBatchesLoading, setIsBatchesLoading] = useState(true);
+  const [batchesError, setBatchesError] = useState<string | null>(null);
 
   const activeTheme = useMemo(() => createAppTheme(themeMode, primaryColor), [themeMode, primaryColor]);
 
@@ -231,6 +278,32 @@ function App(): JSX.Element {
     }
   }, []);
 
+  const fetchActiveBatches = useCallback(async (options?: { showLoader?: boolean }) => {
+    const showLoader = options?.showLoader ?? true;
+
+    if (showLoader) {
+      setIsBatchesLoading(true);
+      setBatchesError(null);
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/rvol/active-batches?limit=10`);
+      if (!response.ok) {
+        throw new Error('Failed to load active RVOL batches.');
+      }
+      const data: ApiActiveBatch[] = await response.json();
+      const rows = data.flatMap((batch) => mapActiveBatchRows(batch));
+      setActiveBatchRows(rows);
+      setBatchesError(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unexpected error while loading RVOL batches.';
+      setBatchesError(message);
+    } finally {
+      setIsBatchesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchAppSettings();
   }, [fetchAppSettings]);
@@ -238,7 +311,8 @@ function App(): JSX.Element {
   useEffect(() => {
     void fetchPositions();
     void fetchPortfolioSummary();
-  }, [fetchPositions, fetchPortfolioSummary]);
+    void fetchActiveBatches();
+  }, [fetchPositions, fetchPortfolioSummary, fetchActiveBatches]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -253,6 +327,20 @@ function App(): JSX.Element {
       window.clearInterval(intervalId);
     };
   }, [fetchPositions]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || activePage !== 'batches') {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void fetchActiveBatches({ showLoader: false });
+    }, 30000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activePage, fetchActiveBatches]);
 
   const handleAddPosition = useCallback(
     async (values: PositionFormValues) => {
@@ -478,6 +566,17 @@ function App(): JSX.Element {
             </Button>
             <Button
               size="small"
+              variant={activePage === 'batches' ? 'contained' : 'text'}
+              color="primary"
+              onClick={() => {
+                setActivePage('batches');
+                void fetchActiveBatches();
+              }}
+            >
+              Active batches
+            </Button>
+            <Button
+              size="small"
               variant={activePage === 'settings' ? 'contained' : 'text'}
               color="primary"
               onClick={() => {
@@ -497,7 +596,7 @@ function App(): JSX.Element {
       </AppBar>
       <Box sx={{ py: { xs: 4, md: 6 }, background: (t) => t.palette.background.default, minHeight: '100vh' }}>
         <Container maxWidth="lg">
-          {activePage === 'dashboard' ? (
+          {activePage === 'dashboard' && (
             <Stack spacing={4}>
               <Paper elevation={0} sx={{ p: { xs: 3, md: 4 } }}>
                 <Typography variant="h5" fontWeight={600} gutterBottom>
@@ -555,7 +654,18 @@ function App(): JSX.Element {
                 )}
               </Paper>
             </Stack>
-          ) : (
+          )}
+          {activePage === 'batches' && (
+            <ActiveBatchesPage
+              rows={activeBatchRows}
+              loading={isBatchesLoading}
+              error={batchesError}
+              onRetry={() => {
+                void fetchActiveBatches();
+              }}
+            />
+          )}
+          {activePage === 'settings' && (
             <SettingsPage
               settings={appSettings}
               loading={isSettingsLoading}

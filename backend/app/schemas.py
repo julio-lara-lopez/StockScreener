@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, root_validator
 from typing import Optional, List, Any, Literal
+from pydantic.types import constr
 from uuid import UUID
 from datetime import datetime
 
@@ -76,6 +77,41 @@ class PortfolioSummary(BaseModel):
     realized_pnl: float
     unrealized_pnl: float
     equity_series: List[PortfolioPoint]
+
+
+class ThemeSettings(BaseModel):
+    mode: Literal["light", "dark"] = "light"
+    primary_color: constr(regex=r"^#[0-9a-fA-F]{6}$") = "#1976d2"
+
+
+class AppSettingsResponse(BaseModel):
+    price_min: float
+    price_max: float
+    min_rvol: float
+    volume_cap: int
+    starting_capital: float
+    theme: ThemeSettings
+
+
+class AppSettingsUpdate(BaseModel):
+    price_min: Optional[float] = Field(None, ge=0)
+    price_max: Optional[float] = Field(None, ge=0)
+    min_rvol: Optional[float] = Field(None, ge=0)
+    volume_cap: Optional[int] = Field(None, ge=0)
+    starting_capital: Optional[float] = Field(None, ge=0)
+    theme: Optional[ThemeSettings]
+
+    @root_validator
+    def validate_price_bounds(cls, values):
+        price_min = values.get("price_min")
+        price_max = values.get("price_max")
+        if (
+            price_min is not None
+            and price_max is not None
+            and price_min > price_max
+        ):
+            raise ValueError("price_min cannot be greater than price_max")
+        return values
 
 
 class AlertIn(BaseModel):

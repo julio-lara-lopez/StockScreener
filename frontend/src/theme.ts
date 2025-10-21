@@ -1,10 +1,10 @@
 import { PaletteMode } from '@mui/material';
 import { createTheme, ThemeOptions } from '@mui/material/styles';
 
-const baseOptions: ThemeOptions = {
+const buildBaseOptions = (primaryColor: string): ThemeOptions => ({
   palette: {
     primary: {
-      main: '#1976d2'
+      main: primaryColor
     },
     secondary: {
       main: '#f50057'
@@ -20,10 +20,11 @@ const baseOptions: ThemeOptions = {
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif'
   }
-};
+});
 
-export const createAppTheme = (mode: PaletteMode = 'light') =>
-  createTheme({
+export const createAppTheme = (mode: PaletteMode = 'light', primaryColor = '#1976d2') => {
+  const baseOptions = buildBaseOptions(primaryColor);
+  return createTheme({
     ...baseOptions,
     palette: {
       ...baseOptions.palette,
@@ -37,6 +38,7 @@ export const createAppTheme = (mode: PaletteMode = 'light') =>
             }
     }
   });
+};
 
 const theme = createAppTheme('light');
 

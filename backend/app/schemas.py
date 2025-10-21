@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Any, Literal
 from uuid import UUID
 from datetime import datetime
@@ -102,17 +102,17 @@ class AppSettingsUpdate(BaseModel):
     starting_capital: Optional[float] = Field(None, ge=0)
     theme: Optional[ThemeSettings]
 
-    @root_validator
-    def validate_price_bounds(cls, values):
-        price_min = values.get("price_min")
-        price_max = values.get("price_max")
+    @model_validator(mode="after")
+    def validate_price_bounds(self):
+        price_min = self.price_min
+        price_max = self.price_max
         if (
             price_min is not None
             and price_max is not None
             and price_min > price_max
         ):
             raise ValueError("price_min cannot be greater than price_max")
-        return values
+        return self
 
 
 class AlertIn(BaseModel):

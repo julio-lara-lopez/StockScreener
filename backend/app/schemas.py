@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, root_validator
 from typing import Optional, List, Any, Literal
-from pydantic.types import constr
 from uuid import UUID
 from datetime import datetime
 
@@ -81,7 +80,9 @@ class PortfolioSummary(BaseModel):
 
 class ThemeSettings(BaseModel):
     mode: Literal["light", "dark"] = "light"
-    primary_color: constr(regex=r"^#[0-9a-fA-F]{6}$") = "#1976d2"
+    primary_color: str = Field(
+        "#1976d2", pattern=r"^#[0-9a-fA-F]{6}$"
+    )
 
 
 class AppSettingsResponse(BaseModel):

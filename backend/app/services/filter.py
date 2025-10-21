@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from ..models import AppSetting, RvolCandidate, CandidateFiltered
-from ..config import settings
+from ..models import RvolCandidate, CandidateFiltered
+from ..services.app_settings import load_app_settings
 from datetime import datetime, timedelta
 from typing import Dict
 from zoneinfo import ZoneInfo
@@ -34,22 +34,14 @@ def filter_and_score(db: Session, batch_id) -> list[CandidateFiltered]:
     """
 
     # Default configuration from environment variables
+    settings_cfg = load_app_settings(db)
     cfg: Dict[str, float | int] = {
-        "price_min": settings.PRICE_MIN,
-        "price_max": settings.PRICE_MAX,
-        "min_rvol": settings.MIN_RVOL,
-        "volume_cap": settings.VOLUME_CAP,
-        "topN": settings.TOPN_PER_BATCH,
+        "price_min": float(settings_cfg.get("price_min", 0.0)),
+        "price_max": float(settings_cfg.get("price_max", 0.0)),
+        "min_rvol": float(settings_cfg.get("min_rvol", 0.0)),
+        "volume_cap": int(settings_cfg.get("volume_cap", 0)),
+        "topN": int(settings_cfg.get("topN", 0)),
     }
-
-    # Apply overrides from app_settings if present
-    for s in db.query(AppSetting).all():
-        if isinstance(s.value_json, dict):
-            for k, v in s.value_json.items():
-                if k in cfg:
-                    cfg[k] = v
-        elif s.key in cfg:
-            cfg[s.key] = s.value_json
     q = db.query(RvolCandidate).filter(RvolCandidate.batch_id == batch_id)
     kept = [(row, score_row(row)) for row in q if passes_filters(row, cfg)]
     kept.sort(key=lambda x: x[1], reverse=True)

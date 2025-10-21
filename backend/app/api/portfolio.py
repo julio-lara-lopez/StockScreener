@@ -5,10 +5,10 @@ from typing import Dict, List, Tuple
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from ..config import settings
 from ..db import get_db
 from ..models import Position
 from ..schemas import PortfolioPoint, PortfolioSummary
+from ..services.app_settings import load_app_settings
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -48,7 +48,8 @@ def get_portfolio_summary(db: Session = Depends(get_db)) -> PortfolioSummary:
     positions: List[Position] = (
         db.query(Position).order_by(Position.created_at.asc()).all()
     )
-    starting_capital = float(settings.STARTING_CAPITAL)
+    app_settings = load_app_settings(db)
+    starting_capital = float(app_settings.get("starting_capital", 0.0))
     now = datetime.now(timezone.utc)
 
     realized_total = 0.0

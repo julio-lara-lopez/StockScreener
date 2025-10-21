@@ -3,6 +3,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
@@ -16,7 +17,7 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
-import theme, { createAppTheme } from './theme';
+import { createAppTheme } from './theme';
 import PositionForm, { PositionFormValues } from './components/PositionForm';
 import PositionTable, { Position } from './components/PositionTable';
 import PositionTargetsTable from './components/PositionTargetsTable';
@@ -25,6 +26,10 @@ import PortfolioSummaryCard, {
   PortfolioSummary,
   PortfolioSummaryPoint
 } from './components/PortfolioSummaryCard';
+import SettingsPage, {
+  AppSettings as SettingsData,
+  AppSettingsSubmitValues
+} from './pages/SettingsPage';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -59,6 +64,20 @@ type ApiPortfolioSummary = {
   unrealized_pnl: number;
   equity_series: ApiPortfolioPoint[];
 };
+
+type ApiSettingsResponse = {
+  price_min: number;
+  price_max: number;
+  min_rvol: number;
+  volume_cap: number;
+  starting_capital: number;
+  theme?: {
+    mode?: 'light' | 'dark';
+    primary_color?: string;
+  };
+};
+
+const DEFAULT_THEME_COLOR = '#1976d2';
 
 const mapPosition = (position: ApiPosition): Position => ({
   id: position.id,
@@ -102,10 +121,28 @@ const mapPortfolioSummary = (payload: ApiPortfolioSummary): PortfolioSummary => 
   }))
 });
 
+const mapAppSettings = (payload: ApiSettingsResponse): SettingsData => ({
+  priceMin: Number(payload.price_min),
+  priceMax: Number(payload.price_max),
+  minRvol: Number(payload.min_rvol),
+  volumeCap: Number(payload.volume_cap),
+  startingCapital: Number(payload.starting_capital),
+  theme: {
+    mode: payload.theme?.mode ?? 'light',
+    primaryColor: payload.theme?.primary_color ?? DEFAULT_THEME_COLOR
+  }
+});
+
 function App(): JSX.Element {
   const [positions, setPositions] = useState<Position[]>([]);
   const [activeTab, setActiveTab] = useState<'open' | 'closed' | 'targets'>('open');
-  const [useDarkMode, setUseDarkMode] = useState(false);
+  const [activePage, setActivePage] = useState<'dashboard' | 'settings'>('dashboard');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
+  const [primaryColor, setPrimaryColor] = useState(DEFAULT_THEME_COLOR);
+  const [appSettings, setAppSettings] = useState<SettingsData | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [isSettingsLoading, setIsSettingsLoading] = useState(true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -115,7 +152,7 @@ function App(): JSX.Element {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
 
-  const activeTheme = useMemo(() => (useDarkMode ? createAppTheme('dark') : theme), [useDarkMode]);
+  const activeTheme = useMemo(() => createAppTheme(themeMode, primaryColor), [themeMode, primaryColor]);
 
   const openPositions = useMemo(
     () => positions.filter((position) => position.status === 'open'),
@@ -126,6 +163,30 @@ function App(): JSX.Element {
     () => positions.filter((position) => position.status === 'closed'),
     [positions]
   );
+
+  const fetchAppSettings = useCallback(async () => {
+    setIsSettingsLoading(true);
+    setSettingsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/settings`);
+      if (!response.ok) {
+        throw new Error('Failed to load application settings.');
+      }
+      const data: ApiSettingsResponse = await response.json();
+      const mapped = mapAppSettings(data);
+      setAppSettings(mapped);
+      setThemeMode(mapped.theme.mode);
+      setPrimaryColor(mapped.theme.primaryColor);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Unexpected error while loading application settings.';
+      setSettingsError(message);
+    } finally {
+      setIsSettingsLoading(false);
+    }
+  }, []);
 
   const fetchPositions = useCallback(async (options?: { showLoader?: boolean }) => {
     const showLoader = options?.showLoader ?? true;
@@ -169,6 +230,10 @@ function App(): JSX.Element {
       setIsSummaryLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void fetchAppSettings();
+  }, [fetchAppSettings]);
 
   useEffect(() => {
     void fetchPositions();
@@ -293,80 +358,213 @@ function App(): JSX.Element {
     [fetchPositions, fetchPortfolioSummary]
   );
 
+  const handleSaveSettings = useCallback(
+    async (values: AppSettingsSubmitValues) => {
+      setIsSavingSettings(true);
+      setSettingsError(null);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/settings`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            price_min: values.priceMin,
+            price_max: values.priceMax,
+            min_rvol: values.minRvol,
+            volume_cap: values.volumeCap,
+            starting_capital: values.startingCapital,
+            theme: {
+              mode: values.themeMode,
+              primary_color: values.primaryColor
+            }
+          })
+        });
+
+        if (!response.ok) {
+          let message = 'Unable to update application settings.';
+          try {
+            const payload = await response.json();
+            if (payload?.detail) {
+              message = typeof payload.detail === 'string' ? payload.detail : message;
+            }
+          } catch {
+            // ignore JSON parse errors
+          }
+          throw new Error(message);
+        }
+
+        const data: ApiSettingsResponse = await response.json();
+        const mapped = mapAppSettings(data);
+        setAppSettings(mapped);
+        setThemeMode(mapped.theme.mode);
+        setPrimaryColor(mapped.theme.primaryColor);
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Unexpected error while saving application settings.';
+        setSettingsError(message);
+        throw err instanceof Error ? err : new Error(message);
+      } finally {
+        setIsSavingSettings(false);
+      }
+    },
+    []
+  );
+
+  const handleToggleThemeMode = useCallback(async () => {
+    const previousMode = themeMode;
+    const nextMode = themeMode === 'light' ? 'dark' : 'light';
+    setThemeMode(nextMode);
+    setSettingsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          theme: {
+            mode: nextMode
+          }
+        })
+      });
+
+      if (!response.ok) {
+        let message = 'Unable to update theme preference.';
+        try {
+          const payload = await response.json();
+          if (payload?.detail) {
+            message = typeof payload.detail === 'string' ? payload.detail : message;
+          }
+        } catch {
+          // ignore JSON parse errors
+        }
+        throw new Error(message);
+      }
+
+      const data: ApiSettingsResponse = await response.json();
+      const mapped = mapAppSettings(data);
+      setAppSettings(mapped);
+      setThemeMode(mapped.theme.mode);
+      setPrimaryColor(mapped.theme.primaryColor);
+    } catch (err) {
+      setThemeMode(previousMode);
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Unexpected error while updating theme preference.';
+      setSettingsError(message);
+    }
+  }, [themeMode]);
+
   return (
     <ThemeProvider theme={activeTheme}>
       <CssBaseline />
       <AppBar elevation={0} position="sticky" color="transparent">
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Typography variant="h6" fontWeight={600} color="primary">
-            Portfolio Positions
-          </Typography>
-          <Tooltip title={`Switch to ${useDarkMode ? 'light' : 'dark'} mode`}>
-            <IconButton color="primary" onClick={() => setUseDarkMode((prev) => !prev)}>
-              {useDarkMode ? <LightModeIcon /> : <DarkModeIcon />}
+        <Toolbar sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+            <Typography variant="h6" fontWeight={600} color="primary">
+              Portfolio Positions
+            </Typography>
+            <Button
+              size="small"
+              variant={activePage === 'dashboard' ? 'contained' : 'text'}
+              color="primary"
+              onClick={() => setActivePage('dashboard')}
+            >
+              Dashboard
+            </Button>
+            <Button
+              size="small"
+              variant={activePage === 'settings' ? 'contained' : 'text'}
+              color="primary"
+              onClick={() => {
+                setActivePage('settings');
+                void fetchAppSettings();
+              }}
+            >
+              Settings
+            </Button>
+          </Stack>
+          <Tooltip title={`Switch to ${themeMode === 'dark' ? 'light' : 'dark'} mode`}>
+            <IconButton color="primary" onClick={() => { void handleToggleThemeMode(); }}>
+              {themeMode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
             </IconButton>
           </Tooltip>
         </Toolbar>
       </AppBar>
       <Box sx={{ py: { xs: 4, md: 6 }, background: (t) => t.palette.background.default, minHeight: '100vh' }}>
         <Container maxWidth="lg">
-          <Stack spacing={4}>
-            <Paper elevation={0} sx={{ p: { xs: 3, md: 4 } }}>
-              <Typography variant="h5" fontWeight={600} gutterBottom>
-                Add a position
-              </Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Record each stock position with entry details to stay on top of your exposure.
-              </Typography>
-              {error && (
-                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-                  {error}
-                </Alert>
-              )}
-              <PositionForm onSubmit={handleAddPosition} isSubmitting={isSubmitting} />
-            </Paper>
-            <PortfolioSummaryCard
-              summary={portfolioSummary}
-              loading={isSummaryLoading}
-              error={summaryError}
-              onRetry={fetchPortfolioSummary}
+          {activePage === 'dashboard' ? (
+            <Stack spacing={4}>
+              <Paper elevation={0} sx={{ p: { xs: 3, md: 4 } }}>
+                <Typography variant="h5" fontWeight={600} gutterBottom>
+                  Add a position
+                </Typography>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Record each stock position with entry details to stay on top of your exposure.
+                </Typography>
+                {error && (
+                  <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+                    {error}
+                  </Alert>
+                )}
+                <PositionForm onSubmit={handleAddPosition} isSubmitting={isSubmitting} />
+              </Paper>
+              <PortfolioSummaryCard
+                summary={portfolioSummary}
+                loading={isSummaryLoading}
+                error={summaryError}
+                onRetry={fetchPortfolioSummary}
+              />
+              <Paper elevation={0} sx={{ p: { xs: 2, md: 3 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: 2, px: { xs: 1, md: 0 } }}>
+                  <Box>
+                    <Typography variant="h5" fontWeight={600}>
+                      Positions overview
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {openPositions.length === 0 && closedPositions.length === 0
+                        ? 'No positions added yet. Use the form above to create your first entry.'
+                        : 'Track current exposure, cost basis, and realized performance at a glance.'}
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Divider sx={{ mb: 2 }} />
+                <Tabs
+                  value={activeTab}
+                  onChange={(_, value: 'open' | 'closed' | 'targets') => setActiveTab(value)}
+                  aria-label="Position status tabs"
+                  sx={{ px: { xs: 1, md: 0 }, mb: 2 }}
+                >
+                  <Tab label={`Open (${openPositions.length})`} value="open" />
+                  <Tab label={`Closed (${closedPositions.length})`} value="closed" />
+                  <Tab label="Profit targets" value="targets" />
+                </Tabs>
+                {activeTab === 'targets' ? (
+                  <PositionTargetsTable positions={openPositions} loading={isLoading} />
+                ) : (
+                  <PositionTable
+                    positions={activeTab === 'open' ? openPositions : closedPositions}
+                    variant={activeTab === 'open' ? 'open' : 'closed'}
+                    loading={isLoading}
+                    onEdit={handleEditPosition}
+                  />
+                )}
+              </Paper>
+            </Stack>
+          ) : (
+            <SettingsPage
+              settings={appSettings}
+              loading={isSettingsLoading}
+              saving={isSavingSettings}
+              error={settingsError}
+              onRetry={fetchAppSettings}
+              onSubmit={handleSaveSettings}
             />
-            <Paper elevation={0} sx={{ p: { xs: 2, md: 3 } }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: 2, px: { xs: 1, md: 0 } }}>
-                <Box>
-                  <Typography variant="h5" fontWeight={600}>
-                    Positions overview
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {openPositions.length === 0 && closedPositions.length === 0
-                      ? 'No positions added yet. Use the form above to create your first entry.'
-                      : 'Track current exposure, cost basis, and realized performance at a glance.'}
-                  </Typography>
-                </Box>
-              </Stack>
-              <Divider sx={{ mb: 2 }} />
-              <Tabs
-                value={activeTab}
-                onChange={(_, value: 'open' | 'closed' | 'targets') => setActiveTab(value)}
-                aria-label="Position status tabs"
-                sx={{ px: { xs: 1, md: 0 }, mb: 2 }}
-              >
-                <Tab label={`Open (${openPositions.length})`} value="open" />
-                <Tab label={`Closed (${closedPositions.length})`} value="closed" />
-                <Tab label="Profit targets" value="targets" />
-              </Tabs>
-              {activeTab === 'targets' ? (
-                <PositionTargetsTable positions={openPositions} loading={isLoading} />
-              ) : (
-                <PositionTable
-                  positions={activeTab === 'open' ? openPositions : closedPositions}
-                  variant={activeTab === 'open' ? 'open' : 'closed'}
-                  loading={isLoading}
-                  onEdit={handleEditPosition}
-                />
-              )}
-            </Paper>
-          </Stack>
+          )}
         </Container>
       </Box>
       <EditPositionDialog

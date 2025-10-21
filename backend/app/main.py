@@ -34,7 +34,7 @@ app.include_router(alerts.router)
 app.include_router(settings_api.router)
 app.include_router(portfolio.router)
 # in app/main.py
-ENABLE_POLLER = False
+ENABLE_POLLER = True
 
 
 # Start background price poller (simple thread for MVP)

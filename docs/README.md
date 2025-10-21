@@ -317,3 +317,31 @@ volumes:
   - Daily idempotency keys for top-N batch notifications
 
 - Clock skew handling for market open/close (skip polling after hours unless enabled)
+## Local development with Docker Compose
+
+The repository includes a `docker-compose.yml` that starts the frontend, backend, and Postgres database in one command. Docker Compose automatically reads environment variables from a `.env` file in the repository root if you need to override any of the defaults referenced below (for example `FINNHUB_API_KEY` or `VITE_API_BASE_URL`).
+
+```bash
+# from the repository root
+docker compose up --build
+```
+
+This builds the frontend and backend images, runs database migrations (via SQLAlchemy metadata creation), and exposes the services on:
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- Postgres: localhost:5432 (`app`/`app` credentials, database `screener`)
+
+Shut everything down (and optionally remove the database volume) with:
+
+```bash
+docker compose down
+docker compose down -v  # removes the persistent Postgres volume
+```
+
+If you change frontend API URLs or other build-time values, rebuild the relevant image:
+
+```bash
+docker compose build frontend
+```
+

@@ -107,6 +107,7 @@ class AppSettingsResponse(BaseModel):
     price_min: float
     price_max: float
     min_rvol: float
+    min_pct_change: float
     volume_cap: int
     starting_capital: float
     theme: ThemeSettings
@@ -116,6 +117,7 @@ class AppSettingsUpdate(BaseModel):
     price_min: Optional[float] = Field(None, ge=0)
     price_max: Optional[float] = Field(None, ge=0)
     min_rvol: Optional[float] = Field(None, ge=0)
+    min_pct_change: Optional[float] = Field(None, ge=0)
     volume_cap: Optional[int] = Field(None, ge=0)
     starting_capital: Optional[float] = Field(None, ge=0)
     theme: Optional[ThemeSettings]

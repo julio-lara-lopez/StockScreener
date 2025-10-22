@@ -70,6 +70,7 @@ type ApiSettingsResponse = {
   price_min: number;
   price_max: number;
   min_rvol: number;
+  min_pct_change: number;
   volume_cap: number;
   starting_capital: number;
   theme?: {
@@ -144,6 +145,7 @@ const mapAppSettings = (payload: ApiSettingsResponse): SettingsData => ({
   priceMin: Number(payload.price_min),
   priceMax: Number(payload.price_max),
   minRvol: Number(payload.min_rvol),
+  minPctChange: Number(payload.min_pct_change),
   volumeCap: Number(payload.volume_cap),
   startingCapital: Number(payload.starting_capital),
   theme: {
@@ -460,6 +462,7 @@ function App(): JSX.Element {
             price_min: values.priceMin,
             price_max: values.priceMax,
             min_rvol: values.minRvol,
+            min_pct_change: values.minPctChange,
             volume_cap: values.volumeCap,
             starting_capital: values.startingCapital,
             theme: {

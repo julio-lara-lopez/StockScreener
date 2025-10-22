@@ -7,6 +7,7 @@ from .api import (
     alerts,
     settings as settings_api,
     portfolio,
+    rvol,
 )
 from .workers.poller import run_price_poller
 import threading
@@ -33,6 +34,7 @@ app.include_router(positions.router)
 app.include_router(alerts.router)
 app.include_router(settings_api.router)
 app.include_router(portfolio.router)
+app.include_router(rvol.router)
 # in app/main.py
 ENABLE_POLLER = True
 

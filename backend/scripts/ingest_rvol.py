@@ -1,6 +1,9 @@
 import os
 import re
 import uuid
+from dataclasses import dataclass
+from typing import Dict
+
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -9,8 +12,53 @@ import unicodedata
 
 dotenv.load_dotenv()
 URL = os.environ.get("RVOL_URL")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+SETTINGS_URL = os.environ.get("APP_SETTINGS_URL")
 
 MULT = {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12}
+
+
+@dataclass
+class FilterConfig:
+    min_rvol: float
+    min_price: float
+    max_price: float
+
+
+def _env_float(*keys: str, default: float) -> float:
+    for key in keys:
+        raw = os.environ.get(key)
+        if raw is None:
+            continue
+        try:
+            return float(raw)
+        except ValueError:
+            continue
+    return default
+
+
+def load_filter_config() -> FilterConfig:
+    settings_endpoint = SETTINGS_URL or f"{API_BASE_URL.rstrip('/')}/api/settings"
+
+    try:
+        resp = requests.get(settings_endpoint, timeout=10)
+        resp.raise_for_status()
+        data: Dict[str, object] = resp.json()
+        return FilterConfig(
+            min_rvol=float(data.get("min_rvol", 0.0)),
+            min_price=float(data.get("price_min", 0.0)),
+            max_price=float(data.get("price_max", float("inf"))),
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        print(
+            f"Warning: unable to fetch application settings ({exc}); falling back to environment defaults."
+        )
+
+    return FilterConfig(
+        min_rvol=_env_float("MIN_RVOL", default=0.0),
+        min_price=_env_float("PRICE_MIN", "MIN_PRICE", default=0.0),
+        max_price=_env_float("PRICE_MAX", "MAX_PRICE", default=float("inf")),
+    )
 
 def _normalize_numstr(s: str) -> str:
     """Normalize weird unicode: thin/nb spaces, unicode minus, currency codes."""
@@ -227,6 +275,28 @@ def parse_percent(s):
     s = s.replace("%", "")
     return parse_human_number(s, as_int=False)
 
+
+def apply_filters(df: pd.DataFrame, cfg: FilterConfig) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    rvol_series = pd.to_numeric(df["RVOL_num"], errors="coerce")
+    price_series = pd.to_numeric(df["Price_num"], errors="coerce")
+
+    mask = (
+        rvol_series.ge(cfg.min_rvol)
+        & price_series.ge(cfg.min_price)
+        & price_series.le(cfg.max_price)
+    )
+
+    filtered = df.loc[mask].copy()
+    print(
+        f"Applied filters: min RVOL {cfg.min_rvol}, price between {cfg.min_price} and {cfg.max_price}."
+    )
+    print(f"Rows before filtering: {len(df)} | after filtering: {len(filtered)}")
+    return filtered
+
+
 def post_batch(df):
     payload = {
         "batch_id": str(uuid.uuid4()),
@@ -246,17 +316,23 @@ def post_batch(df):
         ],
     }
     resp = requests.post(
-        "http://localhost:8000/internal/ingest-rvol-batch",
+        f"{API_BASE_URL.rstrip('/')}/internal/ingest-rvol-batch",
         json=payload,
         timeout=30,
     )
     print(resp.status_code, resp.text)
 
+
 if __name__ == "__main__":
+    cfg = load_filter_config()
     df = scrape_and_parse()
     if not df.empty:
         print(f"\nFinal DataFrame shape: {df.shape}")
         if "Ticker" in df.columns and "Name" in df.columns:
             print("\nFinal results:")
             print(df[["Ticker", "Name", "RVOL", "Price", "PctChange", "Volume", "MarketCap"]].head(10))
-        post_batch(df)
+        filtered_df = apply_filters(df, cfg)
+        if filtered_df.empty:
+            print("No rows matched the configured filters. Skipping batch upload.")
+        else:
+            post_batch(filtered_df)

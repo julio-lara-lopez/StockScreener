@@ -23,6 +23,7 @@ def _format_response(config: Dict[str, Any]) -> AppSettingsResponse:
         price_min=float(config.get("price_min", 0)),
         price_max=float(config.get("price_max", 0)),
         min_rvol=float(config.get("min_rvol", 0)),
+        min_pct_change=float(config.get("min_pct_change", 0)),
         volume_cap=int(config.get("volume_cap", 0)),
         starting_capital=float(config.get("starting_capital", 0)),
         theme={
@@ -46,7 +47,7 @@ def update_settings(
 
     updates: Dict[str, Any] = {}
 
-    for key in ("price_min", "price_max", "min_rvol", "starting_capital"):
+    for key in ("price_min", "price_max", "min_rvol", "min_pct_change", "starting_capital"):
         if key in data:
             updates[key] = float(data[key])
 

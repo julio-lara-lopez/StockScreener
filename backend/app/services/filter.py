@@ -10,7 +10,14 @@ def passes_filters(row: RvolCandidate, cfg: Dict) -> bool:
     price_ok = cfg["price_min"] <= float(row.price) <= cfg["price_max"]
     rvol_ok = float(row.rvol) >= cfg["min_rvol"]
     vol_ok = (row.volume or 0) <= cfg["volume_cap"]
-    return price_ok and rvol_ok and vol_ok
+    try:
+        pct_change_value = float(row.pct_change)
+    except (TypeError, ValueError):
+        pct_change_value = None
+    pct_change_ok = (
+        pct_change_value is not None and pct_change_value >= cfg["min_pct_change"]
+    )
+    return price_ok and rvol_ok and vol_ok and pct_change_ok
 
 
 def score_row(row: RvolCandidate) -> float:
@@ -39,6 +46,7 @@ def filter_and_score(db: Session, batch_id) -> list[CandidateFiltered]:
         "price_min": float(settings_cfg.get("price_min", 0.0)),
         "price_max": float(settings_cfg.get("price_max", 0.0)),
         "min_rvol": float(settings_cfg.get("min_rvol", 0.0)),
+        "min_pct_change": float(settings_cfg.get("min_pct_change", 0.0)),
         "volume_cap": int(settings_cfg.get("volume_cap", 0)),
         "topN": int(settings_cfg.get("topN", 0)),
     }
@@ -64,10 +72,14 @@ def filter_and_score(db: Session, batch_id) -> list[CandidateFiltered]:
         reasons = {
             "price": float(row.price),
             "rvol": float(row.rvol),
+            "pct_change": float(row.pct_change)
+            if row.pct_change is not None
+            else None,
             "volume": int(row.volume or 0),
             "rules": {
                 "price_range": [cfg["price_min"], cfg["price_max"]],
                 "min_rvol": cfg["min_rvol"],
+                "min_pct_change": cfg["min_pct_change"],
                 "volume_cap": cfg["volume_cap"],
             },
         }

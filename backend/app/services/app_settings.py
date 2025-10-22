@@ -16,6 +16,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "price_min": env_settings.PRICE_MIN,
     "price_max": env_settings.PRICE_MAX,
     "min_rvol": env_settings.MIN_RVOL,
+    "min_pct_change": env_settings.MIN_PCT_CHANGE,
     "volume_cap": env_settings.VOLUME_CAP,
     "topN": env_settings.TOPN_PER_BATCH,
     "starting_capital": env_settings.STARTING_CAPITAL,

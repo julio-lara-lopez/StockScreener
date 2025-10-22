@@ -23,6 +23,7 @@ class FilterConfig:
     min_rvol: float
     min_price: float
     max_price: float
+    min_pct_change: float
 
 
 def _env_float(*keys: str, default: float) -> float:
@@ -48,6 +49,7 @@ def load_filter_config() -> FilterConfig:
             min_rvol=float(data.get("min_rvol", 0.0)),
             min_price=float(data.get("price_min", 0.0)),
             max_price=float(data.get("price_max", float("inf"))),
+            min_pct_change=float(data.get("min_pct_change", 0.0)),
         )
     except Exception as exc:  # pylint: disable=broad-except
         print(
@@ -58,6 +60,7 @@ def load_filter_config() -> FilterConfig:
         min_rvol=_env_float("MIN_RVOL", default=0.0),
         min_price=_env_float("PRICE_MIN", "MIN_PRICE", default=0.0),
         max_price=_env_float("PRICE_MAX", "MAX_PRICE", default=float("inf")),
+        min_pct_change=_env_float("MIN_PCT_CHANGE", default=0.0),
     )
 
 def _normalize_numstr(s: str) -> str:
@@ -282,16 +285,19 @@ def apply_filters(df: pd.DataFrame, cfg: FilterConfig) -> pd.DataFrame:
 
     rvol_series = pd.to_numeric(df["RVOL_num"], errors="coerce")
     price_series = pd.to_numeric(df["Price_num"], errors="coerce")
+    pct_series = pd.to_numeric(df["Pct_num"], errors="coerce")
 
     mask = (
         rvol_series.ge(cfg.min_rvol)
         & price_series.ge(cfg.min_price)
         & price_series.le(cfg.max_price)
+        & pct_series.ge(cfg.min_pct_change)
     )
 
     filtered = df.loc[mask].copy()
     print(
-        f"Applied filters: min RVOL {cfg.min_rvol}, price between {cfg.min_price} and {cfg.max_price}."
+        f"Applied filters: min RVOL {cfg.min_rvol}, price between {cfg.min_price} and {cfg.max_price}, "
+        f"min % change {cfg.min_pct_change}."
     )
     print(f"Rows before filtering: {len(df)} | after filtering: {len(filtered)}")
     return filtered

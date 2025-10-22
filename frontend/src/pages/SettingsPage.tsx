@@ -19,6 +19,7 @@ export type AppSettings = {
   priceMin: number;
   priceMax: number;
   minRvol: number;
+  minPctChange: number;
   volumeCap: number;
   startingCapital: number;
   theme: ThemePreferences;
@@ -28,6 +29,7 @@ export type AppSettingsSubmitValues = {
   priceMin: number;
   priceMax: number;
   minRvol: number;
+  minPctChange: number;
   volumeCap: number;
   startingCapital: number;
   themeMode: 'light' | 'dark';
@@ -47,6 +49,7 @@ type FormValues = {
   priceMin: string;
   priceMax: string;
   minRvol: string;
+  minPctChange: string;
   volumeCap: string;
   startingCapital: string;
   themeMode: 'light' | 'dark';
@@ -57,6 +60,7 @@ const defaultFormValues: FormValues = {
   priceMin: '',
   priceMax: '',
   minRvol: '',
+  minPctChange: '',
   volumeCap: '',
   startingCapital: '',
   themeMode: 'light',
@@ -84,6 +88,7 @@ function SettingsPage({
       priceMin: settings.priceMin.toString(),
       priceMax: settings.priceMax.toString(),
       minRvol: settings.minRvol.toString(),
+      minPctChange: settings.minPctChange.toString(),
       volumeCap: settings.volumeCap.toString(),
       startingCapital: settings.startingCapital.toString(),
       themeMode: settings.theme.mode,
@@ -99,8 +104,15 @@ function SettingsPage({
   }, [saving]);
 
   const hasValidationError = useMemo(() => {
-    const { priceMin, priceMax, minRvol, volumeCap, startingCapital } = formValues;
-    if (!isNumeric(priceMin) || !isNumeric(priceMax) || !isNumeric(minRvol) || !isNumeric(volumeCap) || !isNumeric(startingCapital)) {
+    const { priceMin, priceMax, minRvol, minPctChange, volumeCap, startingCapital } = formValues;
+    if (
+      !isNumeric(priceMin) ||
+      !isNumeric(priceMax) ||
+      !isNumeric(minRvol) ||
+      !isNumeric(minPctChange) ||
+      !isNumeric(volumeCap) ||
+      !isNumeric(startingCapital)
+    ) {
       return true;
     }
 
@@ -125,6 +137,7 @@ function SettingsPage({
       priceMin: Number(formValues.priceMin),
       priceMax: Number(formValues.priceMax),
       minRvol: Number(formValues.minRvol),
+      minPctChange: Number(formValues.minPctChange),
       volumeCap: Number(formValues.volumeCap),
       startingCapital: Number(formValues.startingCapital),
       themeMode: formValues.themeMode,
@@ -248,6 +261,17 @@ function SettingsPage({
               fullWidth
               value={formValues.minRvol}
               onChange={handleFieldChange('minRvol')}
+              disabled={isBusy}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              label="Minimum % change"
+              type="number"
+              inputProps={{ min: 0, step: 0.1 }}
+              fullWidth
+              value={formValues.minPctChange}
+              onChange={handleFieldChange('minPctChange')}
               disabled={isBusy}
             />
           </Grid>

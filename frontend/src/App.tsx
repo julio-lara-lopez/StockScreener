@@ -21,6 +21,7 @@ import { createAppTheme } from './theme';
 import PositionForm, { PositionFormValues } from './components/PositionForm';
 import PositionTable, { Position } from './components/PositionTable';
 import PositionTargetsTable from './components/PositionTargetsTable';
+import WatchlistAlertsCard from './components/WatchlistAlertsCard';
 import EditPositionDialog from './components/EditPositionDialog';
 import PortfolioSummaryCard, {
   PortfolioSummary,
@@ -621,6 +622,7 @@ function App(): JSX.Element {
                 error={summaryError}
                 onRetry={fetchPortfolioSummary}
               />
+              <WatchlistAlertsCard />
               <Paper elevation={0} sx={{ p: { xs: 2, md: 3 } }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: 2, px: { xs: 1, md: 0 } }}>
                   <Box>

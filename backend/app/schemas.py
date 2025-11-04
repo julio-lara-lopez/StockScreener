@@ -137,7 +137,7 @@ class AppSettingsUpdate(BaseModel):
 
 class AlertIn(BaseModel):
     ticker: str
-    kind: str  # target_pct | target_abs | stop
+    kind: str  # target_pct | target_abs | stop | price_cross
     threshold_value: float
     trailing: bool = False
 

@@ -22,6 +22,7 @@ class AlertKind(str, enum.Enum):
     target_pct = "target_pct"
     target_abs = "target_abs"
     stop = "stop"
+    price_cross = "price_cross"
 
 
 class Channel(str, enum.Enum):

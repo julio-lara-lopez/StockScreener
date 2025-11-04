@@ -13,17 +13,33 @@ from ..config import settings
 
 
 def should_trigger(
-    kind: str, entry: float | None, price: float, threshold: float
+    kind: str,
+    entry: float | None,
+    price: float,
+    threshold: float | None,
+    trailing: bool,
 ) -> bool:
+    if kind == "price_cross":
+        if threshold is None:
+            return False
+        if trailing:
+            return price <= threshold
+        return price >= threshold
     if kind == "target_pct":
+        if threshold is None:
+            return False
         if entry is None:
             return False
         return ((price - entry) / entry) * 100.0 >= threshold
     if kind == "target_abs":
+        if threshold is None:
+            return False
         if entry is None:
             return False
         return (price - entry) >= threshold
     if kind == "stop":
+        if threshold is None:
+            return False
         if entry is None:
             return False
         return price <= threshold
@@ -70,23 +86,40 @@ def run_price_poller():
                 px = prices.get(a.ticker)
                 if px is None:
                     continue
+                kind_value = (
+                    a.kind.value if hasattr(a.kind, "value") else str(a.kind)
+                )
+
                 position = positions_by_ticker.get(a.ticker)
-                if position is None:
+                if position is None and kind_value not in {"price_cross"}:
                     continue
-                entry = (
-                    float(position.entry_price)
-                    if position.entry_price is not None
+
+                entry = None
+                if position is not None and position.entry_price is not None:
+                    entry = float(position.entry_price)
+                threshold = (
+                    float(a.threshold_value)
+                    if a.threshold_value is not None
                     else None
                 )
                 if should_trigger(
-                    a.kind.value if hasattr(a.kind, "value") else a.kind,
+                    kind_value,
                     entry,
                     px,
-                    float(a.threshold_value),
+                    threshold,
+                    bool(a.trailing),
                 ):
                     dedupe = f"alert-{a.id}-{time.strftime('%Y%m%d-%H%M')}"
-                    qty = float(position.qty) if position.qty is not None else None
-                    side = (position.side or "long").lower()
+                    qty = (
+                        float(position.qty)
+                        if position is not None and position.qty is not None
+                        else None
+                    )
+                    side = (
+                        (position.side or "long").lower()
+                        if position is not None and position.side
+                        else "long"
+                    )
                     pnl_abs = None
                     pnl_pct = None
                     if entry is not None and qty is not None:
@@ -98,9 +131,6 @@ def run_price_poller():
                         if entry != 0:
                             pnl_pct = (delta / entry) * 100
 
-                    kind_value = (
-                        a.kind.value if hasattr(a.kind, "value") else str(a.kind)
-                    )
                     lines = [f"*Alert Triggered* `{a.ticker}`"]
                     if entry is not None:
                         lines.append(f"Entry: ${entry:.2f}")
@@ -109,13 +139,16 @@ def run_price_poller():
                         lines.append(
                             f"PnL: ${pnl_abs:+.2f} ({pnl_pct:+.2f}%)"
                         )
-                    threshold = (
-                        float(a.threshold_value)
-                        if a.threshold_value is not None
-                        else None
-                    )
                     if threshold is not None:
-                        lines.append(f"Alert: `{kind_value}` @ {threshold:.2f}")
+                        if kind_value == "price_cross":
+                            direction = (
+                                "≤" if bool(a.trailing) else "≥"
+                            )
+                            lines.append(
+                                f"Alert: price {direction} ${threshold:.2f}"
+                            )
+                        else:
+                            lines.append(f"Alert: `{kind_value}` @ {threshold:.2f}")
                     else:
                         lines.append(f"Alert: `{kind_value}`")
                     msg = "\n".join(lines)

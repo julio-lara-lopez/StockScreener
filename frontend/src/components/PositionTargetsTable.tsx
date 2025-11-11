@@ -83,13 +83,13 @@ const createDefaultCustomTargetState = (): CustomTargetState => ({
   threshold: null
 });
 
-const parsePositiveNumber = (value: string): number | null => {
+const parseNumericInput = (value: string): number | null => {
   const trimmed = value.trim();
   if (trimmed === '') {
     return null;
   }
   const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed)) {
     return null;
   }
   return parsed;
@@ -330,7 +330,7 @@ const PositionTargetsTable = ({
   const saveCustomTarget = async (ticker: string) => {
     const normalizedTicker = ticker.toUpperCase();
     const current = customTargets[normalizedTicker] ?? createDefaultCustomTargetState();
-    const parsedValue = parsePositiveNumber(current.value);
+    const parsedValue = parseNumericInput(current.value);
 
     if (current.mode === 'pct' && parsedValue !== null && TARGET_PCTS.includes(parsedValue)) {
       setSnackbar({
@@ -341,7 +341,7 @@ const PositionTargetsTable = ({
     }
 
     if (parsedValue === null) {
-      setSnackbar({ severity: 'error', message: 'Enter a positive number for your custom alert.' });
+      setSnackbar({ severity: 'error', message: 'Enter a valid number for your custom alert.' });
       return;
     }
 
@@ -610,7 +610,7 @@ const PositionTargetsTable = ({
                   {(() => {
                     const tickerKey = row.ticker.toUpperCase();
                     const customState = customTargets[tickerKey] ?? createDefaultCustomTargetState();
-                    const parsedInput = parsePositiveNumber(customState.value ?? '') ?? null;
+                    const parsedInput = parseNumericInput(customState.value ?? '') ?? null;
                     const previewThreshold = parsedInput ?? customState.threshold;
                     const targetPrice = computeCustomTargetPrice(
                       row.entryPrice,
@@ -656,7 +656,6 @@ const PositionTargetsTable = ({
                             }}
                             placeholder={customState.mode === 'pct' ? '7.5' : '2.5'}
                             inputProps={{
-                              min: 0,
                               step: customState.mode === 'pct' ? 0.1 : 0.01
                             }}
                             InputProps={{

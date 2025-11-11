@@ -76,7 +76,7 @@ const WatchlistAlertsCard = (): JSX.Element => {
       return null;
     }
     const parsed = Number(price);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (!Number.isFinite(parsed)) {
       return null;
     }
     return parsed;
